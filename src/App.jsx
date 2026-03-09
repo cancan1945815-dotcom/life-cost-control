@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import Tesseract from "tesseract.js";
 
+// ========== 版本配置（修改这里即可触发更新提醒） ==========
+const CURRENT_VERSION = "1.2.0"; // 每次更新改这个版本号（比如 1.1.0 → 1.2.0）
+const VERSION_STORAGE_KEY = "MY_APP_VERSION";
+
 export default function App() {
   // ========== 核心状态（增加异常捕获，确保数据不丢失） ==========
   const [items, setItems] = useState(() => {
@@ -23,14 +27,18 @@ export default function App() {
     }
   });
 
-  // ========== 表单状态（新增 customCategory 独立管理自定义分类） ==========
+  // ========== 版本检查状态 ==========
+  const [showUpdateAlert, setShowUpdateAlert] = useState(false);
+  const [oldVersion, setOldVersion] = useState("");
+
+  // ========== 表单状态 ==========
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [purchaseDate, setPurchaseDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
   const [type, setType] = useState("long");
   const [category, setCategory] = useState("服饰");
-  const [customCategory, setCustomCategory] = useState(""); // 新增：独立存储自定义分类
+  const [customCategory, setCustomCategory] = useState("");
   const [quantity, setQuantity] = useState("");
   const [usedCount, setUsedCount] = useState("");
   const [additionalCosts, setAdditionalCosts] = useState([]);
@@ -53,6 +61,20 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("MY_OUTFIT_HISTORY", JSON.stringify(outfitHistory));
   }, [outfitHistory]);
+
+  // ========== 版本检查核心逻辑 ==========
+  useEffect(() => {
+    // 1. 获取本地保存的版本号
+    const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY) || "1.0.0";
+    
+    // 2. 对比版本号（简单的字符串对比，满足你的需求）
+    if (savedVersion !== CURRENT_VERSION) {
+      setOldVersion(savedVersion);
+      setShowUpdateAlert(true);
+      // 3. 更新本地版本号（只提醒一次）
+      localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
+    }
+  }, []);
 
   // ========== 工具函数 ==========
   const allCategories = ["服饰", "电子产品", "食品", "日用品", "其他", ...Array.from(new Set(items.map(i => i.category)))];
@@ -159,7 +181,7 @@ export default function App() {
       .finally(() => setOcrLoading(false));
   };
 
-  // ========== 物品操作功能（修改：提交时优先使用自定义分类） ==========
+  // ========== 物品操作功能 ==========
   const resetForm = () => {
     setName("");
     setPrice("");
@@ -167,7 +189,7 @@ export default function App() {
     setExpireDate("");
     setType("long");
     setCategory("服饰");
-    setCustomCategory(""); // 重置自定义分类
+    setCustomCategory("");
     setQuantity("");
     setUsedCount("");
     setAdditionalCosts([]);
@@ -181,7 +203,6 @@ export default function App() {
       return;
     }
 
-    // 关键：选择「自定义」时，使用 customCategory，否则使用 category
     const finalCategory = category === "自定义" ? customCategory.trim() : category;
     if (category === "自定义" && !finalCategory) {
       alert("请输入自定义分类名称");
@@ -194,7 +215,7 @@ export default function App() {
       purchaseDate,
       expireDate: expireDate || "",
       type,
-      category: finalCategory, // 存入最终分类
+      category: finalCategory,
       image: image || undefined,
       quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
       usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
@@ -217,7 +238,6 @@ export default function App() {
     setPurchaseDate(item.purchaseDate);
     setExpireDate(item.expireDate || "");
     setType(item.type);
-    // 关键：编辑时恢复分类状态
     if (allCategories.includes(item.category)) {
       setCategory(item.category);
       setCustomCategory("");
@@ -349,6 +369,31 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 max-w-4xl mx-auto">
+      {/* 版本更新提醒弹窗 */}
+      {showUpdateAlert && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white p-4 rounded-lg shadow-lg z-50 max-w-md w-full">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="font-bold text-lg">🎉 版本更新</h3>
+              <p className="mt-1 text-sm">
+                已从 v{oldVersion} 更新到 v{CURRENT_VERSION}
+              </p>
+              <p className="mt-2 text-xs opacity-90">
+                ✅ 自定义分类可正常输入<br/>
+                ✅ 数据永久保存不丢失<br/>
+                ✅ 版本更新自动提醒
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowUpdateAlert(false)}
+              className="text-white hover:text-gray-200 ml-2"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className="mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">米米去处 · 物品与穿搭管理</h1>
         <div className="flex border-b border-gray-200 mt-4">
@@ -373,6 +418,8 @@ export default function App() {
             每日穿搭
           </button>
         </div>
+        {/* 显示当前版本号（可选） */}
+        <p className="mt-2 text-xs text-gray-500">当前版本：v{CURRENT_VERSION}</p>
       </header>
 
       {activeTab === "items" && (
@@ -473,7 +520,6 @@ export default function App() {
                   value={category}
                   onChange={(e) => {
                     setCategory(e.target.value);
-                    // 切换分类时重置自定义输入
                     if (e.target.value !== "自定义") setCustomCategory("");
                   }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
@@ -483,7 +529,6 @@ export default function App() {
                   ))}
                   <option value="自定义">自定义分类</option>
                 </select>
-                {/* 自定义分类输入框：绑定独立状态 customCategory */}
                 {category === "自定义" && (
                   <input
                     type="text"
