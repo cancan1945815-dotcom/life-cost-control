@@ -2,6 +2,16 @@ import React, { useState, useEffect } from "react";
 import Tesseract from "tesseract.js";
 
 export default function App() {
+  const defaultCategories = [
+    "餐饮",
+    "交通",
+    "购物",
+    "娱乐",
+    "住房",
+    "其他",
+    "自定义"
+  ];
+
   const [items, setItems] = useState(() => {
     const saved = localStorage.getItem("life_cost_items");
     return saved ? JSON.parse(saved) : [];
@@ -12,11 +22,11 @@ export default function App() {
   const [date, setDate] = useState("");
   const [type, setType] = useState("long");
   const [category, setCategory] = useState("其他");
+  const [customCategory, setCustomCategory] = useState("");
   const [quantity, setQuantity] = useState("");
   const [usedCount, setUsedCount] = useState("");
   const [image, setImage] = useState(null);
-  const [link, setLink] = useState("");
-
+  const [dueDate, setDueDate] = useState(""); // 新增到期时间
   const [editingId, setEditingId] = useState(null);
   const [ocrLoading, setOcrLoading] = useState(false);
 
@@ -51,7 +61,6 @@ export default function App() {
       };
     });
 
-  // OCR 自动识别名称/价格/日期
   const performOCR = async (file) => {
     setOcrLoading(true);
     const preprocessedFile = await preprocessImage(file);
@@ -115,45 +124,20 @@ export default function App() {
       .finally(() => setOcrLoading(false));
   };
 
-  // 链接抓取
-  const fetchItemFromLink = async () => {
-    if (!link) return alert("请输入商品链接");
-    try {
-      const res = await fetch("http://localhost:3001/fetchItem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: link }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setName(data.name || "");
-        setPrice(data.price || "");
-        setImage(data.image || null);
-        setDate(data.date || new Date().toISOString().slice(0, 10));
-      } else {
-        alert("抓取失败，请手动填写");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("抓取异常，请检查链接或后台服务");
-    }
-  };
-
-  // 表单重置
   const resetForm = () => {
     setName("");
     setPrice("");
     setDate("");
     setType("long");
     setCategory("其他");
+    setCustomCategory("");
     setQuantity("");
     setUsedCount("");
     setImage(null);
-    setLink("");
+    setDueDate("");
     setEditingId(null);
   };
 
-  // 添加/编辑
   const addOrUpdateItem = () => {
     if (!name || !price || !date) {
       alert("请填写名称、价格和日期");
@@ -164,15 +148,18 @@ export default function App() {
       return;
     }
 
+    const finalCategory = category === "自定义" ? customCategory : category;
+
     const common = {
       name,
       price: Number(price),
       date,
       type,
-      category: category || "其他",
+      category: finalCategory || "其他",
       image: image || undefined,
       quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
       usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
+      dueDate: dueDate || null, // 保存到期时间
       inTrash: false,
     };
 
@@ -190,21 +177,20 @@ export default function App() {
     resetForm();
   };
 
-  // 编辑
   const startEdit = (item) => {
     setName(item.name);
     setPrice(String(item.price));
     setDate(item.date);
     setType(item.type);
-    setCategory(item.category);
+    setCategory(defaultCategories.includes(item.category) ? item.category : "自定义");
+    setCustomCategory(defaultCategories.includes(item.category) ? "" : item.category);
     setQuantity(item.quantity != null ? String(item.quantity) : "");
     setUsedCount(item.usedCount != null ? String(item.usedCount) : "");
     setImage(item.image);
-    setLink("");
+    setDueDate(item.dueDate || "");
     setEditingId(item.id);
   };
 
-  // 垃圾箱 & 图片删除
   const moveToTrash = (id) =>
     setItems(items.map((i) => (i.id === id ? { ...i, inTrash: true } : i)));
   const restoreItem = (id) =>
@@ -217,7 +203,6 @@ export default function App() {
       ? setItems(items.map((i) => (i.id === id ? { ...i, image: null } : i)))
       : setImage(null);
 
-  // 使用一次
   const useOnce = (id) => {
     setItems(
       items.map((i) => {
@@ -231,7 +216,6 @@ export default function App() {
     );
   };
 
-  // 成本
   const dailyCost = (i) => {
     const days = Math.ceil((new Date() - new Date(i.date)) / (1000 * 60 * 60 * 24)) || 1;
     return (i.price / days).toFixed(2);
@@ -258,13 +242,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold mb-4">米米去处 - OCR + 链接抓取</h1>
-
-      {/* 链接输入 */}
-      <div className="flex gap-2 mb-4">
-        <input className="border p-2 w-full rounded" placeholder="商品链接" value={link} onChange={e => setLink(e.target.value)}/>
-        <button onClick={fetchItemFromLink} className="bg-purple-500 text-white p-2 rounded">自动识别</button>
-      </div>
+      <h1 className="text-3xl font-bold mb-4">米米去处</h1>
 
       {/* 搜索和类型筛选 */}
       <div className="flex gap-2 mb-4">
@@ -281,18 +259,27 @@ export default function App() {
         <input className="border p-2 w-full rounded" placeholder="名称" value={name} onChange={e => setName(e.target.value)} />
         <input className="border p-2 w-full rounded" placeholder="价格" type="number" value={price} onChange={e => setPrice(e.target.value)} />
         <input className="border p-2 w-full rounded" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <input className="border p-2 w-full rounded" type="date" placeholder="到期时间" value={dueDate} onChange={e=>setDueDate(e.target.value)}/>
         <select className="border p-2 w-full rounded" value={type} onChange={e => setType(e.target.value)}>
           <option value="long">长期物品</option>
           <option value="consume">消耗品</option>
         </select>
-        <input className="border p-2 w-full rounded" placeholder="物品类型（可自定义）" value={category} onChange={e=>setCategory(e.target.value)} />
+
+        {/* 分类选择 */}
+        <select className="border p-2 w-full rounded" value={category} onChange={e => setCategory(e.target.value)}>
+          {defaultCategories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {category==="自定义" && <input className="border p-2 w-full rounded" placeholder="自定义类型" value={customCategory} onChange={e=>setCustomCategory(e.target.value)}/>}
+
         {type === "consume" && <>
           <input className="border p-2 w-full rounded" placeholder="总数量（可选）" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} />
           <input className="border p-2 w-full rounded" placeholder="已使用次数（可选）" type="number" value={usedCount} onChange={e => setUsedCount(e.target.value)} />
         </>}
+
         <input type="file" accept="image/*" onChange={handleImageUpload}/>
         {ocrLoading && <p className="text-blue-500">识别中...</p>}
         {image && <div className="flex items-center gap-2 mt-2"><img src={image} className="w-24 h-24 object-cover rounded"/><button onClick={()=>removeImage()} className="bg-red-500 text-white px-2 py-1 rounded">删除图片</button></div>}
+
         <button onClick={addOrUpdateItem} className="bg-blue-500 text-white p-2 rounded w-full">{editingId ? "保存修改" : "添加物品"}</button>
       </div>
 
@@ -315,6 +302,7 @@ export default function App() {
                   <p>平均一次成本：{onceCost(item)}</p>
                   <button onClick={()=>useOnce(item.id)} className="bg-green-500 text-white px-2 py-1 rounded mt-1">使用一次</button>
                 </>}
+                {item.dueDate && <p className="text-red-500">到期时间：{item.dueDate}</p>}
                 <div className="flex gap-2 mt-3">
                   <button onClick={()=>startEdit(item)} className="bg-yellow-400 px-3 py-1 rounded">编辑</button>
                   <button onClick={()=>moveToTrash(item.id)} className="bg-red-500 text-white px-3 py-1 rounded">删除</button>
@@ -332,6 +320,7 @@ export default function App() {
           {item.image && <div className="flex items-center gap-2 mb-2"><img src={item.image} className="w-32 h-32 object-cover rounded"/><button onClick={()=>removeImage(item.id)} className="bg-red-500 text-white px-2 py-1 rounded">删除图片</button></div>}
           <p className="font-bold">{item.name}</p>
           <p>价格：{item.price}</p>
+          {item.dueDate && <p className="text-red-500">到期时间：{item.dueDate}</p>}
           <div className="flex gap-2 mt-3">
             <button onClick={()=>restoreItem(item.id)} className="bg-blue-500 text-white px-3 py-1 rounded">恢复</button>
             <button onClick={()=>deleteItem(item.id)} className="bg-red-700 text-white px-3 py-1 rounded">永久删除</button>
@@ -341,3 +330,4 @@ export default function App() {
     </div>
   );
 }
+
