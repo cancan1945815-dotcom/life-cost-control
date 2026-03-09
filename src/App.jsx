@@ -2,37 +2,39 @@ import React, { useState, useEffect } from "react";
 import Tesseract from "tesseract.js";
 
 export default function App() {
+  // ========== 核心状态 ==========
   const [items, setItems] = useState(() => {
     const saved = localStorage.getItem("life_cost_items");
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [outfitHistory, setOutfitHistory] = useState(() => {
+    const saved = localStorage.getItem("outfit_history");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // ========== 表单状态 ==========
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [purchaseDate, setPurchaseDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
-  const [type, setType] = "long";
-  const [category, setCategory] = useState("其他");
+  const [type, setType] = useState("long");
+  const [category, setCategory] = useState("服饰"); // 默认服饰，方便穿搭
   const [quantity, setQuantity] = useState("");
   const [usedCount, setUsedCount] = useState("");
   const [additionalCosts, setAdditionalCosts] = useState([]);
   const [image, setImage] = useState(null);
 
+  // ========== 辅助状态 ==========
+  const [activeTab, setActiveTab] = useState("items"); // items | outfit
   const [editingId, setEditingId] = useState(null);
   const [ocrLoading, setOcrLoading] = useState(false);
-
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("全部");
   const [collapsed, setCollapsed] = useState({});
+  const [selectedOutfitItems, setSelectedOutfitItems] = useState([]);
 
-  // ====================== 每日穿搭 ======================
-  const [outfitHistory, setOutfitHistory] = useState(() => {
-    const saved = localStorage.getItem("outfit_history");
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [selectedItemIds, setSelectedItemIds] = useState([]);
-
-  // 本地保存
+  // ========== 本地存储 ==========
   useEffect(() => {
     localStorage.setItem("life_cost_items", JSON.stringify(items));
   }, [items]);
@@ -41,34 +43,35 @@ export default function App() {
     localStorage.setItem("outfit_history", JSON.stringify(outfitHistory));
   }, [outfitHistory]);
 
-  const typeCategories = ["电子产品", "服饰", "食品", "日用品", "其他", ...Array.from(new Set(items.map(i => i.category)))];
+  // ========== 工具函数 ==========
+  const allCategories = ["服饰", "电子产品", "食品", "日用品", "其他", ...Array.from(new Set(items.map(i => i.category)))];
 
   const toggleCollapse = (cat) => {
-    setCollapsed({ ...collapsed, [cat]: !collapsed[cat] });
+    setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
-  // ====================== 成本计算（含附加） ======================
   const getTotalCost = (item) => {
-    const base = item.price || 0;
-    const extra = (item.additionalCosts || []).reduce((s, c) => s + (c.amt || 0), 0);
-    return base + extra;
+    const basePrice = item.price || 0;
+    const extraCost = (item.additionalCosts || []).reduce((sum, curr) => sum + (curr.amt || 0), 0);
+    return basePrice + extraCost;
   };
 
   const getDayCost = (item) => {
     if (!item.purchaseDate) return "0.00";
-    const buy = new Date(item.purchaseDate);
-    const now = new Date();
-    const days = Math.max(1, Math.floor((now - buy) / (1000 * 60 * 60 * 24)));
+    const buyDate = new Date(item.purchaseDate);
+    const today = new Date();
+    const days = Math.max(1, Math.floor((today - buyDate) / (1000 * 60 * 60 * 24)));
     return (getTotalCost(item) / days).toFixed(2);
   };
 
   const getUseCost = (item) => {
+    if (item.type !== "consume") return "0.00";
     const total = getTotalCost(item);
-    const cnt = Math.max(1, item.usedCount || 1);
-    return (total / cnt).toFixed(2);
+    const count = Math.max(1, item.usedCount || 0);
+    return (total / count).toFixed(2);
   };
 
-  // ====================== OCR ======================
+  // ========== OCR识别功能 ==========
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -101,37 +104,35 @@ export default function App() {
     setOcrLoading(true);
     const preprocessedFile = await preprocessImage(file);
     Tesseract.recognize(preprocessedFile, "chi_sim+eng", {
-      tessedit_char_whitelist: "0123456789.-年月日",
+      tessedit_char_whitelist: "0123456789.-年月日实付款总计金额合计",
       preserve_interword_spaces: "1",
     })
       .then(({ data: { text } }) => {
         const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
         let detectedName = "", detectedPrice = "", detectedDate = "";
-        const priceKeywords = ["实付款", "总计", "金额", "合计"];
-        for (let i = 0; i < lines.length; i++) {
-          for (let kw of priceKeywords) {
-            if (lines[i].includes(kw)) {
-              const m = lines[i].match(/(\d+(\.\d{1,2})?)/);
-              if (m) detectedPrice = m[0];
-              detectedName = lines[i - 1] || lines[0];
-              break;
-            }
-          }
-          if (detectedPrice) break;
-        }
-        if (!detectedPrice) {
-          for (let line of lines) {
-            const m = line.match(/\d+(\.\d{1,2})?/);
-            if (m) {
-              detectedPrice = m[0];
+
+        const priceRegex = /(\d+(\.\d{1,2})?)/;
+        const priceLines = lines.filter(l => l.includes("实付款") || l.includes("总计") || l.includes("金额"));
+        if (priceLines.length > 0) {
+          const priceMatch = priceLines[0].match(priceRegex);
+          if (priceMatch) detectedPrice = priceMatch[0];
+          const priceLineIndex = lines.indexOf(priceLines[0]);
+          if (priceLineIndex > 0) detectedName = lines[priceLineIndex - 1];
+        } else {
+          for (const line of lines) {
+            const match = line.match(priceRegex);
+            if (match) {
+              detectedPrice = match[0];
               break;
             }
           }
         }
-        for (let line of lines) {
-          const m = line.match(/\d{4}-\d{2}-\d{2}/) || line.match(/\d{2}\/\d{2}\/\d{4}/);
-          if (m) {
-            detectedDate = m[0];
+
+        const dateRegex = /\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/;
+        for (const line of lines) {
+          const dateMatch = line.match(dateRegex);
+          if (dateMatch) {
+            detectedDate = dateMatch[0];
             if (detectedDate.includes("/")) {
               const [mm, dd, yyyy] = detectedDate.split("/");
               detectedDate = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
@@ -139,6 +140,7 @@ export default function App() {
             break;
           }
         }
+
         if (detectedName) setName(detectedName);
         if (detectedPrice) setPrice(detectedPrice);
         if (detectedDate) setPurchaseDate(detectedDate);
@@ -146,36 +148,46 @@ export default function App() {
       .finally(() => setOcrLoading(false));
   };
 
+  // ========== 物品操作功能 ==========
   const resetForm = () => {
-    setName(""); setPrice(""); setPurchaseDate(""); setExpireDate("");
-    setType("long"); setCategory("其他"); setQuantity(""); setUsedCount("");
-    setAdditionalCosts([]); setImage(null); setEditingId(null);
+    setName("");
+    setPrice("");
+    setPurchaseDate("");
+    setExpireDate("");
+    setType("long");
+    setCategory("服饰");
+    setQuantity("");
+    setUsedCount("");
+    setAdditionalCosts([]);
+    setImage(null);
+    setEditingId(null);
   };
 
   const addOrUpdateItem = () => {
     if (!name || !price || !purchaseDate) {
-      alert("请填写名称、价格和购买日期");
+      alert("请填写名称、价格和购买日期（必填项）");
       return;
     }
-    const common = {
+
+    const itemData = {
       name,
       price: Number(price),
       purchaseDate,
-      expireDate,
+      expireDate: expireDate || "",
       type,
-      category: category || "其他",
+      category: category || "服饰",
       image: image || undefined,
       quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
       usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
-      additionalCosts,
-      inTrash: false,
-      isFinished: false, // 是否已耗尽
+      additionalCosts: [...additionalCosts],
+      isFinished: false,
+      inTrash: false
     };
 
     if (editingId) {
-      setItems(items.map(i => i.id !== editingId ? i : { ...i, ...common }));
+      setItems(items.map(item => item.id === editingId ? { ...item, ...itemData } : item));
     } else {
-      setItems([...items, { id: Date.now(), ...common }]);
+      setItems([...items, { id: Date.now(), ...itemData }]);
     }
     resetForm();
   };
@@ -195,221 +207,608 @@ export default function App() {
   };
 
   const addAdditionalCost = () => {
-    const desc = prompt("附加成本描述");
-    const amt = prompt("金额");
-    if (!desc || !amt) return;
-    setAdditionalCosts([...additionalCosts, { desc, amt: Number(amt) }]);
-  };
-
-  const removeImage = () => setImage(null);
-
-  // ====================== 消耗品：使用一次 ======================
-  const handleUseOnce = (item) => {
-    if (item.type !== "consume") return;
-    if (item.isFinished) {
-      alert("已耗尽，无法再使用");
+    const desc = prompt("请输入附加成本描述（如：运费、安装费）：");
+    const amt = prompt("请输入附加成本金额（元）：");
+    if (!desc || !amt || isNaN(Number(amt))) {
+      alert("描述不能为空，金额必须是数字！");
       return;
     }
-    setItems(items.map(it => {
-      if (it.id === item.id) {
-        return { ...it, usedCount: (it.usedCount || 0) + 1 };
+    setAdditionalCosts(prev => [...prev, { desc, amt: Number(amt) }]);
+  };
+
+  const removeAdditionalCost = (index) => {
+    setAdditionalCosts(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeImage = () => {
+    if (window.confirm("确定删除这张图片吗？")) {
+      setImage(null);
+    }
+  };
+
+  // ========== 消耗品专属功能 ==========
+  const handleUseOnce = (itemId) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        if (item.type !== "consume") return item;
+        if (item.isFinished) {
+          alert("该物品已标记为耗尽，无法再使用！");
+          return item;
+        }
+        return { ...item, usedCount: (item.usedCount || 0) + 1 };
       }
-      return it;
+      return item;
     }));
   };
 
-  // ====================== 消耗品：标记耗尽 ======================
-  const handleFinish = (item) => {
-    if (item.type !== "consume") return;
-    setItems(items.map(it => {
-      if (it.id === item.id) {
-        return { ...it, isFinished: true };
-      }
-      return it;
-    }));
-    alert("已标记为耗尽！最终单次使用成本已固定");
+  const handleMarkFinished = (itemId) => {
+    if (window.confirm("确定标记该物品为已耗尽吗？标记后将无法再增加使用次数！")) {
+      setItems(items.map(item => {
+        if (item.id === itemId && item.type === "consume") {
+          return { ...item, isFinished: true };
+        }
+        return item;
+      }));
+    }
   };
 
-  // ====================== 穿搭：选择物品 ======================
-  const toggleSelectItem = (itemId) => {
-    setSelectedItemIds(prev =>
-      prev.includes(itemId)
-        ? prev.filter(id => id !== itemId)
+  // ========== 每日穿搭专属功能 ==========
+  // 筛选出可用于穿搭的物品：分类为服饰 + 消耗品 + 未耗尽
+  const outfitAvailableItems = items.filter(item => 
+    item.category === "服饰" && 
+    item.type === "consume" && 
+    !item.isFinished &&
+    item.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleOutfitItem = (itemId) => {
+    setSelectedOutfitItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId) 
         : [...prev, itemId]
     );
   };
 
-  // ====================== 保存今日穿搭 ======================
   const saveTodayOutfit = () => {
-    if (selectedItemIds.length === 0) {
-      alert("请至少选择一件物品");
+    if (selectedOutfitItems.length === 0) {
+      alert("请至少选择一件服饰");
       return;
     }
 
     const today = new Date().toISOString().split("T")[0];
-
-    const updatedItems = items.map(it => {
-      if (selectedItemIds.includes(it.id)) {
-        if (it.type === "consume" && !it.isFinished) {
-          return { ...it, usedCount: (it.usedCount || 0) + 1 };
-        }
+    
+    // 1. 更新物品使用次数
+    const updatedItems = items.map(item => {
+      if (selectedOutfitItems.includes(item.id) && !item.isFinished) {
+        return { ...item, usedCount: (item.usedCount || 0) + 1 };
       }
-      return it;
+      return item;
     });
     setItems(updatedItems);
 
-    const newRecord = { date: today, itemIds: selectedItemIds };
-    const exists = outfitHistory.find(r => r.date === today);
-    setOutfitHistory(exists
-      ? outfitHistory.map(r => r.date === today ? newRecord : r)
-      : [...outfitHistory, newRecord]
-    );
-    setSelectedItemIds([]);
-    alert("今日穿搭已保存！消耗品使用次数+1");
+    // 2. 保存穿搭记录
+    const newRecord = {
+      date: today,
+      itemIds: selectedOutfitItems,
+      note: "" // 预留备注字段
+    };
+
+    const existingIndex = outfitHistory.findIndex(r => r.date === today);
+    let newHistory;
+    if (existingIndex >= 0) {
+      newHistory = outfitHistory.map((r, i) => i === existingIndex ? newRecord : r);
+    } else {
+      newHistory = [...outfitHistory, newRecord].sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
+
+    setOutfitHistory(newHistory);
+    setSelectedOutfitItems([]);
+    alert("今日穿搭已保存，使用次数已更新！");
   };
 
-  const activeItems = items
-    .filter(i => !i.inTrash)
-    .filter(i => filterCategory === "全部" || i.category === filterCategory)
-    .filter(i => !search || i.name.includes(search));
+  const deleteOutfitRecord = (date) => {
+    if (window.confirm("确定删除该条穿搭记录吗？")) {
+      setOutfitHistory(outfitHistory.filter(r => r.date !== date));
+    }
+  };
 
-  // ====================== 渲染 ======================
+  // ========== 筛选逻辑 (物品管理页) ==========
+  const filteredItems = items
+    .filter(item => !item.inTrash)
+    .filter(item => filterCategory === "全部" || item.category === filterCategory)
+    .filter(item => item.name.toLowerCase().includes(search.toLowerCase()));
+
+  const groupedItems = filteredItems.reduce((acc, item) => {
+    if (!acc[item.category]) acc[item.category] = [];
+    acc[item.category].push(item);
+    return acc;
+  }, {});
+
   return (
-    <div className="min-h-screen bg-gray-100 p-6 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">米米去处</h1>
-
-      <div className="mb-6 flex gap-3">
-        <button onClick={() => { document.getElementById("tab1").style.display = "block"; document.getElementById("tab2").style.display = "none"; }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg">物品管理</button>
-        <button onClick={() => { document.getElementById("tab1").style.display = "none"; document.getElementById("tab2").style.display = "block"; }}
-          className="bg-pink-600 text-white px-4 py-2 rounded-lg">每日穿搭</button>
-      </div>
-
-      {/* ====================== 物品页面 ====================== */}
-      <div id="tab1" style={{ display: "block" }}>
-        <div className="flex gap-3 mb-4">
-          <input className="border p-2 rounded flex-1" placeholder="搜索物品" value={search} onChange={e => setSearch(e.target.value)} />
-          <select className="border p-2 rounded min-w-[140px]" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-            <option value="全部">全部分类</option>
-            {typeCategories.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 max-w-4xl mx-auto">
+      {/* 标题与标签页切换 */}
+      <header className="mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">米米去处 · 物品与穿搭管理</h1>
+        <div className="flex border-b border-gray-200 mt-4">
+          <button
+            onClick={() => setActiveTab("items")}
+            className={`py-2 px-4 font-medium text-sm ${
+              activeTab === "items" 
+                ? "border-b-2 border-blue-600 text-blue-600" 
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            物品管理
+          </button>
+          <button
+            onClick={() => setActiveTab("outfit")}
+            className={`py-2 px-4 font-medium text-sm ${
+              activeTab === "outfit" 
+                ? "border-b-2 border-pink-600 text-pink-600" 
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            每日穿搭
+          </button>
         </div>
+      </header>
 
-        <div className="bg-white p-6 rounded-xl shadow mb-6 space-y-3">
-          <h2 className="text-xl font-semibold">{editingId ? "编辑物品" : "添加物品"}</h2>
-          {editingId && <button onClick={resetForm} className="bg-gray-400 text-white p-2 rounded w-full">取消编辑</button>}
-          <input className="border p-2 w-full rounded" placeholder="物品名称" value={name} onChange={e => setName(e.target.value)} />
-          <input className="border p-2 w-full rounded" placeholder="价格" type="number" value={price} onChange={e => setPrice(e.target.value)} />
-          <input className="border p-2 w-full rounded" type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} />
-          <input className="border p-2 w-full rounded" type="date" value={expireDate} onChange={e => setExpireDate(e.target.value)} placeholder="到期日(可选)" />
+      {/* ========== 物品管理标签页 ========== */}
+      {activeTab === "items" && (
+        <>
+          {/* 搜索与筛选栏 */}
+          <div className="bg-white rounded-lg shadow-sm p-3 mb-6 flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              placeholder="搜索物品名称..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+            >
+              <option value="全部">全部分类</option>
+              {allCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
 
-          <select className="border p-2 w-full rounded" value={type} onChange={e => setType(e.target.value)}>
-            <option value="long">长期物品</option>
-            <option value="consume">消耗品 / 服饰</option>
-          </select>
+          {/* 物品添加/编辑表单 */}
+          <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2 border-gray-100">
+              {editingId ? "编辑物品" : "添加新物品"}
+            </h2>
 
-          <select className="border p-2 w-full rounded" value={category} onChange={e => setCategory(e.target.value)}>
-            {typeCategories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+            {editingId && (
+              <button
+                onClick={resetForm}
+                className="w-full mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                取消编辑
+              </button>
+            )}
 
-          {type === "consume" && (
-            <>
-              <input className="border p-2 w-full rounded" placeholder="总数量(可选)" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} />
-              <input className="border p-2 w-full rounded" placeholder="已使用次数" type="number" value={usedCount} onChange={e => setUsedCount(e.target.value)} />
-            </>
-          )}
-
-          <button onClick={addAdditionalCost} className="bg-purple-600 text-white p-2 rounded w-full">添加附加成本</button>
-          <input type="file" accept="image/*" onChange={handleImageUpload} />
-          {ocrLoading && <p className="text-blue-600">OCR识别中...</p>}
-          {image && <img src={image} className="w-24 h-24 object-cover rounded" />}
-          <button onClick={addOrUpdateItem} className="bg-blue-600 text-white p-2 rounded w-full">{editingId ? "保存修改" : "添加物品"}</button>
-        </div>
-
-        {typeCategories.filter(c => c !== "全部").map(cat => {
-          const list = activeItems.filter(i => i.category === cat);
-          if (list.length === 0) return null;
-          return (
-            <div key={cat} className="mb-4">
-              <div className="bg-gray-200 p-3 rounded-lg flex justify-between cursor-pointer" onClick={() => toggleCollapse(cat)}>
-                <span className="font-medium">{cat}（{list.length}）</span>
-                <span>{collapsed[cat] ? "▲ 收起" : "▼ 展开"}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-600 mb-1">物品名称 <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="如：纯棉T恤、无线鼠标"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
               </div>
 
-              {!collapsed[cat] && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  {list.map(item => (
-                    <div key={item.id} className="bg-white p-4 rounded-xl shadow">
-                      <h3 className="font-bold text-lg mb-1">{item.name}</h3>
-                      <p className="text-sm">价格：{item.price} 元</p>
-                      <p className="text-sm">购买：{item.purchaseDate}</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">价格（元） <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
 
-                      {item.type === "long" && (
-                        <p className="text-green-700 font-medium mt-1">每日成本：¥{getDayCost(item)}</p>
-                      )}
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">购买日期 <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={purchaseDate}
+                  onChange={(e) => setPurchaseDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
 
-                      {item.type === "consume" && (
-                        <div className="mt-1">
-                          <p className="text-blue-700 font-medium">单次成本：¥{getUseCost(item)}</p>
-                          <p className="text-sm">已使用：{item.usedCount || 0} 次</p>
-                          {item.isFinished && <p className="text-red-600 font-bold">✅ 已耗尽 · 最终成本</p>}
-                        </div>
-                      )}
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">到期日期（可选）</label>
+                <input
+                  type="date"
+                  value={expireDate}
+                  onChange={(e) => setExpireDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
 
-                      <div className="mt-3 flex flex-col gap-2">
-                        {item.type === "consume" && !item.isFinished && (
-                          <button onClick={() => handleUseOnce(item)} className="bg-blue-500 text-white py-1 rounded">使用一次（+1）</button>
-                        )}
-                        {item.type === "consume" && !item.isFinished && (
-                          <button onClick={() => handleFinish(item)} className="bg-red-500 text-white py-1 rounded">标记为已耗尽</button>
-                        )}
-                        <button onClick={() => startEdit(item)} className="bg-yellow-400 py-1 rounded">编辑</button>
-                      </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                >
+                  <option value="long">长期物品（如电器、家具）</option>
+                  <option value="consume">消耗品（如服饰、食品、日用品）</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                >
+                  {allCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  <option value="自定义">自定义分类</option>
+                </select>
+                {category === "自定义" && (
+                  <input
+                    type="text"
+                    placeholder="输入自定义分类名称"
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                )}
+              </div>
+
+              {type === "consume" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">总数量（可选）</label>
+                    <input
+                      type="number"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      placeholder="如：10片、5件"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">初始使用次数（可选）</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={usedCount}
+                      onChange={(e) => setUsedCount(e.target.value)}
+                      placeholder="默认0次"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-600">附加成本（如运费、安装费）</label>
+                <button
+                  onClick={addAdditionalCost}
+                  className="px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors"
+                >
+                  添加
+                </button>
+              </div>
+
+              {additionalCosts.length > 0 && (
+                <div className="bg-gray-50 rounded-md p-3 mt-2">
+                  {additionalCosts.map((cost, index) => (
+                    <div key={index} className="flex justify-between items-center mb-2 last:mb-0">
+                      <span className="text-sm text-gray-700">{cost.desc}：{cost.amt.toFixed(2)}元</span>
+                      <button
+                        onClick={() => removeAdditionalCost(index)}
+                        className="text-red-500 text-sm hover:text-red-700"
+                      >
+                        删除
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          );
-        })}
-      </div>
 
-      {/* ====================== 每日穿搭 ====================== */}
-      <div id="tab2" style={{ display: "none" }}>
-        <div className="bg-white p-6 rounded-xl shadow mb-6">
-          <h2 className="text-xl font-semibold mb-4">今日穿搭 · 选择使用的物品</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
-            {activeItems.map(it => (
-              <div
-                key={it.id}
-                onClick={() => toggleSelectItem(it.id)}
-                className={`border p-3 rounded cursor-pointer ${selectedItemIds.includes(it.id) ? "bg-pink-100 border-pink-400" : ""}`}
-              >
-                <p className="font-medium">{it.name}</p>
-                <p className="text-sm">成本：¥{it.type === "long" ? getDayCost(it) : getUseCost(it)}</p>
-              </div>
-            ))}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选，支持OCR识别）</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="w-full"
+              />
+
+              {ocrLoading && (
+                <p className="text-sm text-blue-500 mt-2">正在识别图片信息，请稍候...</p>
+              )}
+
+              {image && (
+                <div className="mt-3 flex items-center gap-3">
+                  <img
+                    src={image}
+                    alt="物品凭证"
+                    className="w-20 h-20 object-cover rounded-md border border-gray-200"
+                  />
+                  <button
+                    onClick={removeImage}
+                    className="text-sm text-red-500 hover:text-red-700"
+                  >
+                    删除图片
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={addOrUpdateItem}
+              className="w-full mt-6 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+            >
+              {editingId ? "保存修改" : "添加物品"}
+            </button>
           </div>
-          <button onClick={saveTodayOutfit} className="bg-pink-600 text-white p-3 rounded w-full">
-            保存今日穿搭（消耗品使用次数+1）
-          </button>
-        </div>
 
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-semibold mb-4">历史穿搭记录</h2>
-          {outfitHistory.sort((a, b) => new Date(b.date) - new Date(a.date)).map(record => {
-            const usedItems = items.filter(i => record.itemIds.includes(i.id));
-            return (
-              <div key={record.date} className="border-b pb-3 mb-3">
-                <p className="font-bold">{record.date}</p>
-                {usedItems.map(i => (
-                  <p key={i.id}>- {i.name} · 成本：¥{i.type === "long" ? getDayCost(i) : getUseCost(i)}</p>
-                ))}
+          {/* 物品列表 */}
+          <div className="mb-10">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4">我的物品列表</h2>
+
+            {Object.keys(groupedItems).length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                <p className="text-gray-500">暂无符合条件的物品记录</p>
+                <p className="text-gray-400 mt-2">点击上方「添加新物品」开始记录吧！</p>
               </div>
-            );
-          })}
+            ) : (
+              Object.keys(groupedItems).map(category => (
+                <div key={category} className="mb-5">
+                  <div
+                    onClick={() => toggleCollapse(category)}
+                    className="bg-gray-100 rounded-lg px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-gray-200 transition-colors"
+                  >
+                    <span className="font-medium text-gray-800">{category}（{groupedItems[category].length}件）</span>
+                    <span className="text-gray-500">{collapsed[category] ? "▲ 收起" : "▼ 展开"}</span>
+                  </div>
+
+                  {!collapsed[category] && (
+                    <div className="mt-3 space-y-3">
+                      {groupedItems[category].map(item => (
+                        <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+                          <div className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4">
+                            {item.image && (
+                              <div className="sm:w-24 sm:h-24 flex-shrink-0">
+                                <img
+                                  src={item.image}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover rounded-md border border-gray-200"
+                                />
+                              </div>
+                            )}
+
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start mb-2">
+                                <h3 className="font-bold text-lg text-gray-800">{item.name}</h3>
+                                {item.type === "consume" && (
+                                  <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                                    item.isFinished
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-green-100 text-green-800"
+                                  }`}>
+                                    {item.isFinished ? "已耗尽" : "使用中"}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-sm">
+                                <p className="text-gray-600">
+                                  <span className="font-medium text-gray-700">总价：</span>
+                                  ¥{getTotalCost(item).toFixed(2)}（含附加）
+                                </p>
+                                <p className="text-gray-600">
+                                  <span className="font-medium text-gray-700">购买日期：</span>
+                                  {item.purchaseDate}
+                                </p>
+                                {item.expireDate && (
+                                  <p className="text-gray-600">
+                                    <span className="font-medium text-gray-700">到期日期：</span>
+                                    {item.expireDate}
+                                  </p>
+                                )}
+                                {item.type === "consume" && item.quantity && (
+                                  <p className="text-gray-600">
+                                    <span className="font-medium text-gray-700">总数量：</span>
+                                    {item.quantity}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="mb-4">
+                                {item.type === "long" ? (
+                                  <div className="bg-blue-50 rounded-md p-3">
+                                    <p className="font-medium text-blue-800">长期物品 · 每日成本</p>
+                                    <p className="text-2xl font-bold text-blue-600 mt-1">¥{getDayCost(item)}</p>
+                                    <p className="text-xs text-gray-500 mt-1">随使用天数增加，成本逐渐降低</p>
+                                  </div>
+                                ) : (
+                                  <div className="bg-green-50 rounded-md p-3">
+                                    <p className="font-medium text-green-800">消耗品 · 单次成本</p>
+                                    <p className="text-2xl font-bold text-green-600 mt-1">¥{getUseCost(item)}</p>
+                                    <p className="text-xs text-gray-500 mt-1">已使用 {item.usedCount || 0} 次</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {item.additionalCosts && item.additionalCosts.length > 0 && (
+                                <div className="mb-4 text-sm">
+                                  <details>
+                                    <summary className="font-medium text-gray-700 cursor-pointer">查看附加成本</summary>
+                                    <div className="mt-2 bg-gray-50 rounded-md p-2">
+                                      {item.additionalCosts.map((cost, idx) => (
+                                        <p key={idx} className="text-gray-600">- {cost.desc}：¥{cost.amt.toFixed(2)}</p>
+                                      ))}
+                                    </div>
+                                  </details>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="bg-gray-50 px-4 py-3 flex flex-wrap gap-2 border-t border-gray-100">
+                            {item.type === "consume" && !item.isFinished && (
+                              <>
+                                <button
+                                  onClick={() => handleUseOnce(item.id)}
+                                  className="px-3 py-1.5 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 transition-colors"
+                                >
+                                  使用一次（+1）
+                                </button>
+                                <button
+                                  onClick={() => handleMarkFinished(item.id)}
+                                  className="px-3 py-1.5 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 transition-colors"
+                                >
+                                  标记为耗尽
+                                </button>
+                              </>
+                            )}
+
+                            <div className="ml-auto flex gap-2">
+                              <button
+                                onClick={() => startEdit(item)}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 transition-colors"
+                              >
+                                编辑
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm("确定删除该物品吗？删除后无法恢复！")) {
+                                    setItems(items.filter(i => i.id !== item.id));
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-gray-200 text-red-600 rounded-md text-sm hover:bg-gray-300 transition-colors"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ========== 每日穿搭标签页 ========== */}
+      {activeTab === "outfit" && (
+        <div className="space-y-6 mb-10">
+          {/* 今日穿搭选择区 */}
+          <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+            <h2 className="text-xl font-semibold text-pink-600 mb-4">今日穿搭 ({new Date().toISOString().split("T")[0]})</h2>
+            
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="搜索服饰..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-300"
+              />
+              <p className="text-xs text-gray-500 mt-2">提示：仅显示「服饰」分类且「未耗尽」的消耗品</p>
+            </div>
+
+            {outfitAvailableItems.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                暂无可用服饰，请先在「物品管理」中添加分类为「服饰」的消耗品。
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
+                  {outfitAvailableItems.map(item => (
+                    <div
+                      key={item.id}
+                      onClick={() => toggleOutfitItem(item.id)}
+                      className={`border rounded-lg p-3 cursor-pointer transition-all ${
+                        selectedOutfitItems.includes(item.id)
+                          ? "border-pink-500 bg-pink-50 ring-2 ring-pink-200"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      {item.image && (
+                        <div className="w-full h-20 mb-2 overflow-hidden rounded">
+                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <h3 className="font-medium text-sm text-center">{item.name}</h3>
+                      <p className="text-xs text-gray-500 text-center mt-1">¥{getUseCost(item)}/次</p>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={saveTodayOutfit}
+                  className="w-full py-3 bg-pink-600 text-white rounded-md font-medium hover:bg-pink-700 transition-colors"
+                >
+                  保存今日穿搭记录
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* 历史穿搭记录 */}
+          <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+            <h2 className="text-xl font-semibold text-pink-600 mb-4">历史穿搭记录</h2>
+            
+            {outfitHistory.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                暂无历史穿搭记录
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                {outfitHistory.map(record => {
+                  const recordItems = items.filter(item => record.itemIds.includes(item.id));
+                  return (
+                    <div key={record.date} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-bold text-gray-800">{record.date}</h3>
+                        <button
+                          onClick={() => deleteOutfitRecord(record.date)}
+                          className="text-xs text-red-500 hover:text-red-600"
+                        >
+                          删除
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {recordItems.map(item => (
+                          <span key={item.id} className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-700">
+                            {item.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
