@@ -4,8 +4,8 @@ import Tesseract from "tesseract.js";
 export default function App() {
   // ========== 核心状态（增加异常捕获，确保数据不丢失） ==========
   const [items, setItems] = useState(() => {
-    try { // 增加异常捕获，防止数据损坏导致清空
-      const saved = localStorage.getItem("MY_LIFE_COST_ITEMS"); // 唯一键名，避免冲突
+    try {
+      const saved = localStorage.getItem("MY_LIFE_COST_ITEMS");
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
       console.log("读取物品数据失败，使用空列表", e);
@@ -14,8 +14,8 @@ export default function App() {
   });
 
   const [outfitHistory, setOutfitHistory] = useState(() => {
-    try { // 增加异常捕获
-      const saved = localStorage.getItem("MY_OUTFIT_HISTORY"); // 唯一键名
+    try {
+      const saved = localStorage.getItem("MY_OUTFIT_HISTORY");
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
       console.log("读取穿搭数据失败，使用空列表", e);
@@ -23,20 +23,21 @@ export default function App() {
     }
   });
 
-  // ========== 表单状态 ==========
+  // ========== 表单状态（新增 customCategory 独立管理自定义分类） ==========
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [purchaseDate, setPurchaseDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
   const [type, setType] = useState("long");
-  const [category, setCategory] = useState("服饰"); // 默认服饰，方便穿搭
+  const [category, setCategory] = useState("服饰");
+  const [customCategory, setCustomCategory] = useState(""); // 新增：独立存储自定义分类
   const [quantity, setQuantity] = useState("");
   const [usedCount, setUsedCount] = useState("");
   const [additionalCosts, setAdditionalCosts] = useState([]);
   const [image, setImage] = useState(null);
 
   // ========== 辅助状态 ==========
-  const [activeTab, setActiveTab] = useState("items"); // items | outfit
+  const [activeTab, setActiveTab] = useState("items");
   const [editingId, setEditingId] = useState(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -44,16 +45,16 @@ export default function App() {
   const [collapsed, setCollapsed] = useState({});
   const [selectedOutfitItems, setSelectedOutfitItems] = useState([]);
 
-  // ========== 本地存储（修改键名，确保唯一性） ==========
+  // ========== 本地存储 ==========
   useEffect(() => {
-    localStorage.setItem("MY_LIFE_COST_ITEMS", JSON.stringify(items)); // 唯一键名
+    localStorage.setItem("MY_LIFE_COST_ITEMS", JSON.stringify(items));
   }, [items]);
 
   useEffect(() => {
-    localStorage.setItem("MY_OUTFIT_HISTORY", JSON.stringify(outfitHistory)); // 唯一键名
+    localStorage.setItem("MY_OUTFIT_HISTORY", JSON.stringify(outfitHistory));
   }, [outfitHistory]);
 
-  // ========== 工具函数（无修改） ==========
+  // ========== 工具函数 ==========
   const allCategories = ["服饰", "电子产品", "食品", "日用品", "其他", ...Array.from(new Set(items.map(i => i.category)))];
 
   const toggleCollapse = (cat) => {
@@ -81,7 +82,7 @@ export default function App() {
     return (total / count).toFixed(2);
   };
 
-  // ========== OCR识别功能（无修改） ==========
+  // ========== OCR识别功能 ==========
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -158,7 +159,7 @@ export default function App() {
       .finally(() => setOcrLoading(false));
   };
 
-  // ========== 物品操作功能（无修改） ==========
+  // ========== 物品操作功能（修改：提交时优先使用自定义分类） ==========
   const resetForm = () => {
     setName("");
     setPrice("");
@@ -166,6 +167,7 @@ export default function App() {
     setExpireDate("");
     setType("long");
     setCategory("服饰");
+    setCustomCategory(""); // 重置自定义分类
     setQuantity("");
     setUsedCount("");
     setAdditionalCosts([]);
@@ -179,13 +181,20 @@ export default function App() {
       return;
     }
 
+    // 关键：选择「自定义」时，使用 customCategory，否则使用 category
+    const finalCategory = category === "自定义" ? customCategory.trim() : category;
+    if (category === "自定义" && !finalCategory) {
+      alert("请输入自定义分类名称");
+      return;
+    }
+
     const itemData = {
       name,
       price: Number(price),
       purchaseDate,
       expireDate: expireDate || "",
       type,
-      category: category || "服饰",
+      category: finalCategory, // 存入最终分类
       image: image || undefined,
       quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
       usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
@@ -208,7 +217,14 @@ export default function App() {
     setPurchaseDate(item.purchaseDate);
     setExpireDate(item.expireDate || "");
     setType(item.type);
-    setCategory(item.category);
+    // 关键：编辑时恢复分类状态
+    if (allCategories.includes(item.category)) {
+      setCategory(item.category);
+      setCustomCategory("");
+    } else {
+      setCategory("自定义");
+      setCustomCategory(item.category);
+    }
     setQuantity(item.quantity != null ? String(item.quantity) : "");
     setUsedCount(item.usedCount != null ? String(item.usedCount) : "");
     setAdditionalCosts(item.additionalCosts || []);
@@ -236,7 +252,7 @@ export default function App() {
     }
   };
 
-  // ========== 消耗品专属功能（无修改） ==========
+  // ========== 消耗品专属功能 ==========
   const handleUseOnce = (itemId) => {
     setItems(items.map(item => {
       if (item.id === itemId) {
@@ -262,8 +278,7 @@ export default function App() {
     }
   };
 
-  // ========== 每日穿搭专属功能（无修改） ==========
-  // 筛选出可用于穿搭的物品：分类为服饰 + 消耗品 + 未耗尽
+  // ========== 每日穿搭专属功能 ==========
   const outfitAvailableItems = items.filter(item => 
     item.category === "服饰" && 
     item.type === "consume" && 
@@ -287,7 +302,6 @@ export default function App() {
 
     const today = new Date().toISOString().split("T")[0];
     
-    // 1. 更新物品使用次数
     const updatedItems = items.map(item => {
       if (selectedOutfitItems.includes(item.id) && !item.isFinished) {
         return { ...item, usedCount: (item.usedCount || 0) + 1 };
@@ -296,11 +310,10 @@ export default function App() {
     });
     setItems(updatedItems);
 
-    // 2. 保存穿搭记录
     const newRecord = {
       date: today,
       itemIds: selectedOutfitItems,
-      note: "" // 预留备注字段
+      note: ""
     };
 
     const existingIndex = outfitHistory.findIndex(r => r.date === today);
@@ -322,7 +335,7 @@ export default function App() {
     }
   };
 
-  // ========== 筛选逻辑 (物品管理页)（无修改） ==========
+  // ========== 筛选逻辑 ==========
   const filteredItems = items
     .filter(item => !item.inTrash)
     .filter(item => filterCategory === "全部" || item.category === filterCategory)
@@ -336,7 +349,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 max-w-4xl mx-auto">
-      {/* 标题与标签页切换 */}
       <header className="mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">米米去处 · 物品与穿搭管理</h1>
         <div className="flex border-b border-gray-200 mt-4">
@@ -363,10 +375,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* ========== 物品管理标签页 ========== */}
       {activeTab === "items" && (
         <>
-          {/* 搜索与筛选栏 */}
           <div className="bg-white rounded-lg shadow-sm p-3 mb-6 flex flex-col sm:flex-row gap-3">
             <input
               type="text"
@@ -387,7 +397,6 @@ export default function App() {
             </select>
           </div>
 
-          {/* 物品添加/编辑表单 */}
           <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
             <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2 border-gray-100">
               {editingId ? "编辑物品" : "添加新物品"}
@@ -462,7 +471,11 @@ export default function App() {
                 <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    // 切换分类时重置自定义输入
+                    if (e.target.value !== "自定义") setCustomCategory("");
+                  }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
                 >
                   {allCategories.map(cat => (
@@ -470,11 +483,13 @@ export default function App() {
                   ))}
                   <option value="自定义">自定义分类</option>
                 </select>
+                {/* 自定义分类输入框：绑定独立状态 customCategory */}
                 {category === "自定义" && (
                   <input
                     type="text"
                     placeholder="输入自定义分类名称"
-                    onChange={(e) => setCategory(e.target.value)}
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
                     className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
                   />
                 )}
@@ -574,7 +589,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* 物品列表 */}
           <div className="mb-10">
             <h2 className="text-xl font-semibold text-gray-700 mb-4">我的物品列表</h2>
 
@@ -725,10 +739,8 @@ export default function App() {
         </>
       )}
 
-      {/* ========== 每日穿搭标签页 ========== */}
       {activeTab === "outfit" && (
         <div className="space-y-6 mb-10">
-          {/* 今日穿搭选择区 */}
           <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <h2 className="text-xl font-semibold text-pink-600 mb-4">今日穿搭 ({new Date().toISOString().split("T")[0]})</h2>
             
@@ -781,7 +793,6 @@ export default function App() {
             )}
           </div>
 
-          {/* 历史穿搭记录 */}
           <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <h2 className="text-xl font-semibold text-pink-600 mb-4">历史穿搭记录</h2>
             
