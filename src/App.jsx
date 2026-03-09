@@ -1,251 +1,408 @@
 import React, { useState, useEffect } from "react";
+import Tesseract from "tesseract.js";
 
 export default function App() {
-  const [page, setPage] = useState("items"); 
+  // ----------------- 数据状态 -----------------
   const [items, setItems] = useState(() => {
     const saved = localStorage.getItem("life_cost_items");
     return saved ? JSON.parse(saved) : [];
   });
-  const [categories, setCategories] = useState(() => {
-    const saved = localStorage.getItem("life_cost_categories");
-    return saved ? JSON.parse(saved) : ["其他", "食品", "衣物", "电子"];
-  });
 
-  const [collapsed, setCollapsed] = useState({});
-
-  // 每日穿搭记录
-  const [outfits, setOutfits] = useState(() => {
-    const saved = localStorage.getItem("daily_outfits");
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  useEffect(() => localStorage.setItem("life_cost_items", JSON.stringify(items)), [items]);
-  useEffect(() => localStorage.setItem("life_cost_categories", JSON.stringify(categories)), [categories]);
-  useEffect(() => localStorage.setItem("daily_outfits", JSON.stringify(outfits)), [outfits]);
-
-  // ---------------- 表单状态 ----------------
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [purchaseDate, setPurchaseDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
   const [type, setType] = useState("long");
-  const [category, setCategory] = useState(categories[0]);
+  const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("");
   const [usedCount, setUsedCount] = useState("");
   const [image, setImage] = useState(null);
-  const [editingId, setEditingId] = useState(null);
 
+  const [editingId, setEditingId] = useState(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("全部");
+  const [collapsed, setCollapsed] = useState({});
+  const [customCategories, setCustomCategories] = useState(
+    JSON.parse(localStorage.getItem("life_cost_categories") || "[]")
+  );
+
+  const [page, setPage] = useState("items"); // items / outfit
+  const [todayOutfit, setTodayOutfit] = useState(
+    JSON.parse(localStorage.getItem("life_cost_todayOutfit") || "[]")
+  );
+  const [outfitHistory, setOutfitHistory] = useState(
+    JSON.parse(localStorage.getItem("life_cost_outfitHistory") || "[]")
+  );
+
+  // ----------------- 本地存储 -----------------
+  useEffect(() => {
+    localStorage.setItem("life_cost_items", JSON.stringify(items));
+  }, [items]);
+
+  useEffect(() => {
+    localStorage.setItem("life_cost_categories", JSON.stringify(customCategories));
+  }, [customCategories]);
+
+  useEffect(() => {
+    localStorage.setItem("life_cost_todayOutfit", JSON.stringify(todayOutfit));
+  }, [todayOutfit]);
+
+  useEffect(() => {
+    localStorage.setItem("life_cost_outfitHistory", JSON.stringify(outfitHistory));
+  }, [outfitHistory]);
+
+  // ----------------- OCR 功能 -----------------
+  const preprocessImage = (file) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          const avg =
+            0.299 * imageData.data[i] +
+            0.587 * imageData.data[i + 1] +
+            0.114 * imageData.data[i + 2];
+          imageData.data[i] = imageData.data[i + 1] = imageData.data[i + 2] = avg;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        canvas.toBlob((blob) => resolve(blob), "image/png");
+      };
+    });
+
+  const performOCR = async (file) => {
+    setOcrLoading(true);
+    const preprocessedFile = await preprocessImage(file);
+    Tesseract.recognize(preprocessedFile, "chi_sim+eng", {
+      tessedit_char_whitelist: "0123456789.-年月日",
+      preserve_interword_spaces: "1",
+    })
+      .then(({ data: { text } }) => {
+        const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+        let detectedName = "";
+        let detectedPrice = "";
+        let detectedDate = "";
+
+        const priceKeywords = ["实付款", "总计", "金额", "合计"];
+        for (let i = 0; i < lines.length; i++) {
+          for (let kw of priceKeywords) {
+            if (lines[i].includes(kw)) {
+              const m = lines[i].match(/(\d+(\.\d{1,2})?)/);
+              if (m) detectedPrice = m[0];
+              detectedName = lines[i - 1] || lines[0];
+              break;
+            }
+          }
+          if (detectedPrice) break;
+        }
+
+        if (!detectedPrice) {
+          for (let line of lines) {
+            const m = line.match(/\d+(\.\d{1,2})?/);
+            if (m) {
+              detectedPrice = m[0];
+              break;
+            }
+          }
+        }
+
+        for (let line of lines) {
+          const m =
+            line.match(/\d{4}-\d{2}-\d{2}/) ||
+            line.match(/\d{2}\/\d{2}\/\d{4}/);
+          if (m) {
+            detectedDate = m[0];
+            if (detectedDate.includes("/")) {
+              const [mm, dd, yyyy] = detectedDate.split("/");
+              detectedDate = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+            }
+            break;
+          }
+        }
+
+        if (detectedName) setName(detectedName);
+        if (detectedPrice) setPrice(detectedPrice);
+        if (detectedDate) setPurchaseDate(detectedDate);
+      })
+      .finally(() => setOcrLoading(false));
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setImage(url);
+    performOCR(file);
+  };
+
+  // ----------------- 表单操作 -----------------
   const resetForm = () => {
-    setName(""); setPrice(""); setPurchaseDate(""); setExpireDate("");
-    setType("long"); setCategory(categories[0]); setQuantity(""); setUsedCount("");
-    setImage(null); setEditingId(null);
+    setName("");
+    setPrice("");
+    setPurchaseDate("");
+    setExpireDate("");
+    setType("long");
+    setCategory("");
+    setQuantity("");
+    setUsedCount("");
+    setImage(null);
+    setEditingId(null);
   };
 
   const addOrUpdateItem = () => {
     if (!name || !price || !purchaseDate) return alert("请填写名称、价格和购买日期");
+    if (type === "consume" && !quantity && !usedCount) return alert("消耗品请填写数量或已使用次数");
+
     const common = {
       name,
       price: Number(price),
       purchaseDate,
       expireDate,
       type,
-      category,
+      category: category || "其他",
+      image: image || undefined,
       quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
       usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
-      image: image || undefined,
+      subCosts: editingId ? items.find(i => i.id === editingId)?.subCosts || [] : [],
       inTrash: false,
     };
-    if (!categories.includes(category)) setCategories([...categories, category]);
+
+    if (!customCategories.includes(common.category) && common.category !== "其他") {
+      setCustomCategories([...customCategories, common.category]);
+    }
 
     if (editingId) {
-      setItems(items.map(i => i.id === editingId ? { ...i, ...common } : i));
+      setItems(items.map(i => (i.id !== editingId ? i : { ...i, ...common })));
     } else {
-      setItems([...items, { id: Date.now(), ...common }]);
+      const newItem = { id: Date.now(), ...common };
+      setItems([...items, newItem]);
     }
+
     resetForm();
   };
 
   const startEdit = (item) => {
-    setName(item.name); setPrice(String(item.price)); setPurchaseDate(item.purchaseDate);
-    setExpireDate(item.expireDate); setType(item.type); setCategory(item.category);
+    setName(item.name);
+    setPrice(String(item.price));
+    setPurchaseDate(item.purchaseDate);
+    setExpireDate(item.expireDate || "");
+    setType(item.type);
+    setCategory(item.category);
     setQuantity(item.quantity != null ? String(item.quantity) : "");
     setUsedCount(item.usedCount != null ? String(item.usedCount) : "");
-    setImage(item.image); setEditingId(item.id);
+    setImage(item.image);
+    setEditingId(item.id);
   };
 
-  const toggleCollapse = (cat) => setCollapsed({...collapsed, [cat]: !collapsed[cat]});
+  const moveToTrash = (id) => setItems(items.map(i => (i.id === id ? { ...i, inTrash: true } : i)));
+  const restoreItem = (id) => setItems(items.map(i => (i.id === id ? { ...i, inTrash: false } : i)));
+  const deleteItem = (id) => window.confirm("确定永久删除？") && setItems(items.filter(i => i.id !== id));
+  const removeImage = (id = null) => id ? setItems(items.map(i => (i.id === id ? { ...i, image: null } : i))) : setImage(null);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const todayOutfit = outfits[today] || [];
-
-  const toggleOutfitItem = (id) => {
-    let updated = [...todayOutfit];
-    if (todayOutfit.includes(id)) {
-      updated = updated.filter(i => i !== id);
-      // 减少使用次数（可选）
-      setItems(items.map(i => i.id === id && i.type==="consume" && i.usedCount>0 ? {...i, usedCount:i.usedCount-1}:i));
-    } else {
-      updated.push(id);
-      // 自动增加使用次数
-      setItems(items.map(i => i.id === id && i.type==="consume" ? {...i, usedCount:(i.usedCount||0)+1}:i));
-    }
-    const newOutfits = {...outfits, [today]: updated};
-    setOutfits(newOutfits);
+  // ----------------- 附属成本 -----------------
+  const addSubCost = (itemId, name, price, date) => {
+    setItems(items.map(i => {
+      if (i.id !== itemId) return i;
+      const newSubCost = { id: Date.now(), name, price: Number(price), date };
+      return { ...i, subCosts: [...(i.subCosts || []), newSubCost] };
+    }));
+  };
+  const removeSubCost = (itemId, subCostId) => {
+    setItems(items.map(i => {
+      if (i.id !== itemId) return i;
+      return { ...i, subCosts: i.subCosts.filter(sc => sc.id !== subCostId) };
+    }));
   };
 
-  const activeItems = items.filter(i => !i.inTrash);
-  const typeCategories = [...new Set(items.map(i => i.category))];
+  // ----------------- 使用次数 -----------------
+  const useOnce = (id) => {
+    setItems(items.map(i => {
+      if (i.id !== id) return i;
+      if (i.type === "consume") {
+        const remain = i.quantity != null ? i.quantity - (i.usedCount || 0) : null;
+        return { ...i, usedCount: (i.usedCount || 0) + 1, remain: remain != null ? remain - 1 : null };
+      }
+      return i;
+    }));
+  };
+
+  // ----------------- 分类折叠 -----------------
+  const toggleCollapse = (cat) => {
+    setCollapsed({ ...collapsed, [cat]: !collapsed[cat] });
+  };
+
+  // ----------------- 成本计算 -----------------
+  const dailyCost = (i) => {
+    const days = Math.ceil((new Date() - new Date(i.purchaseDate)) / (1000 * 60 * 60 * 24)) || 1;
+    const subTotal = i.subCosts?.reduce((a, c) => a + c.price, 0) || 0;
+    return ((i.price + subTotal) / days).toFixed(2);
+  };
+
+  const onceCost = (i) => {
+    if (!i.usedCount || i.usedCount === 0) return "0.00";
+    const subTotal = i.subCosts?.reduce((a, c) => a + c.price, 0) || 0;
+    return ((i.price + subTotal) / i.usedCount).toFixed(2);
+  };
+
+  // ----------------- 页面渲染 -----------------
+  const activeItems = items.filter(i => !i.inTrash).filter(i => i.name.includes(search));
+  const trashItems = items.filter(i => i.inTrash);
+  const typeCategories = ["全部", ...new Set([...customCategories, ...activeItems.map(i => i.category)])];
+
+  // ----------------- 今日穿搭 -----------------
+  const toggleOutfit = (id) => {
+    const exists = todayOutfit.includes(id);
+    const updated = exists ? todayOutfit.filter(i => i !== id) : [...todayOutfit, id];
+    setTodayOutfit(updated);
+  };
+
+  const saveTodayOutfit = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    setOutfitHistory([...outfitHistory, { date, items: todayOutfit }]);
+    // 自动增加使用次数
+    setItems(items.map(i => todayOutfit.includes(i.id) && i.type === "consume"
+      ? { ...i, usedCount: (i.usedCount || 0) + 1 }
+      : i));
+    setTodayOutfit([]);
+  };
 
   const getExpireStatus = (expire) => {
-    if (!expire) return null;
-    const todayDate = new Date();
-    const expireDateObj = new Date(expire);
-    const diffDays = Math.ceil((expireDateObj - todayDate) / (1000*60*60*24));
-    if (diffDays < 0) return "⚠️ 已到期";
-    if (diffDays <= 3) return "⏳ 即将到期";
-    return null;
+    if (!expire) return "";
+    const today = new Date();
+    const exp = new Date(expire);
+    if (exp < today) return "已过期";
+    const diffDays = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 7) return `即将到期(${diffDays}天)`;
+    return "";
   };
 
+  // ----------------- 渲染 -----------------
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100 p-4">
       <h1 className="text-3xl font-bold mb-4">米米去处</h1>
-
       <div className="flex gap-2 mb-4">
-        <button className={page==="items"?"bg-blue-500 text-white":"bg-gray-200"} onClick={()=>setPage("items")}>物品管理</button>
-        <button className={page==="outfits"?"bg-blue-500 text-white":"bg-gray-200"} onClick={()=>setPage("outfits")}>每日穿搭</button>
-        <button className={page==="history"?"bg-blue-500 text-white":"bg-gray-200"} onClick={()=>setPage("history")}>历史穿搭</button>
+        <button onClick={() => setPage("items")} className={`px-4 py-2 rounded ${page==="items"?"bg-blue-500 text-white":"bg-gray-300"}`}>物品管理</button>
+        <button onClick={() => setPage("outfit")} className={`px-4 py-2 rounded ${page==="outfit"?"bg-blue-500 text-white":"bg-gray-300"}`}>每日穿搭</button>
       </div>
 
-      {/* ---------------- 物品管理页 ---------------- */}
-      {page==="items" && (
+      {page === "items" && (
         <div>
-          <div className="bg-white p-5 rounded-xl shadow mb-6 space-y-3">
-            <h2 className="text-xl font-semibold">{editingId?"编辑物品":"添加物品"}</h2>
+          {/* 表单 */}
+          <div className="bg-white p-4 rounded shadow mb-6 space-y-2">
+            <h2 className="text-xl font-semibold">{editingId ? "编辑物品" : "添加物品"}</h2>
             {editingId && <button onClick={resetForm} className="bg-gray-400 text-white p-2 rounded w-full">取消编辑</button>}
-            <input className="border p-2 w-full rounded" placeholder="名称" value={name} onChange={e=>setName(e.target.value)} />
-            <input className="border p-2 w-full rounded" placeholder="价格" type="number" value={price} onChange={e=>setPrice(e.target.value)} />
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="block text-sm font-medium">购买日期</label>
-                <input className="border p-2 w-full rounded" type="date" value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value)} />
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium">到期日期（可选）</label>
-                <input className="border p-2 w-full rounded" type="date" value={expireDate} onChange={e=>setExpireDate(e.target.value)} />
-              </div>
-            </div>
-            <select className="border p-2 w-full rounded" value={type} onChange={e=>setType(e.target.value)}>
+            <input className="border p-2 w-full rounded" placeholder="名称" value={name} onChange={e => setName(e.target.value)} />
+            <input className="border p-2 w-full rounded" placeholder="价格" type="number" value={price} onChange={e => setPrice(e.target.value)} />
+            <input type="date" className="border p-2 w-full rounded" placeholder="购买日期" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} />
+            <input type="date" className="border p-2 w-full rounded" placeholder="到期日期（可选）" value={expireDate} onChange={e => setExpireDate(e.target.value)} />
+            <select className="border p-2 w-full rounded" value={type} onChange={e => setType(e.target.value)}>
               <option value="long">长期物品</option>
               <option value="consume">消耗品</option>
             </select>
-            <input className="border p-2 w-full rounded" placeholder="物品类型（可自定义）" value={category} onChange={e=>setCategory(e.target.value)} />
+            <select className="border p-2 w-full rounded" value={category} onChange={e => setCategory(e.target.value)}>
+              <option value="">请选择类型</option>
+              {customCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="custom">自定义</option>
+            </select>
+            {category==="custom" && <input className="border p-2 w-full rounded" placeholder="自定义类型" onChange={e=>setCategory(e.target.value)} />}
             {type==="consume" && <>
-              <input className="border p-2 w-full rounded" placeholder="总数量（可选）" type="number" value={quantity} onChange={e=>setQuantity(e.target.value)} />
-              <input className="border p-2 w-full rounded" placeholder="已使用次数（可选）" type="number" value={usedCount} onChange={e=>setUsedCount(e.target.value)} />
+              <input className="border p-2 w-full rounded" placeholder="总数量" type="number" value={quantity} onChange={e=>setQuantity(e.target.value)} />
+              <input className="border p-2 w-full rounded" placeholder="已使用次数" type="number" value={usedCount} onChange={e=>setUsedCount(e.target.value)} />
             </>}
+            <input type="file" accept="image/*" onChange={handleImageUpload}/>
+            {ocrLoading && <p className="text-blue-500">识别中...</p>}
+            {image && <div className="flex items-center gap-2 mt-2"><img src={image} className="w-24 h-24 object-cover rounded"/><button onClick={()=>removeImage()} className="bg-red-500 text-white px-2 py-1 rounded">删除图片</button></div>}
             <button onClick={addOrUpdateItem} className="bg-blue-500 text-white p-2 rounded w-full">{editingId?"保存修改":"添加物品"}</button>
           </div>
 
-{typeCategories.map(cat => {
-  const catItems = activeItems.filter(i => i.category === cat);
-  if (catItems.length === 0) return null;
+          {/* 物品列表 */}
+          {typeCategories.filter(t=>"全部"!==t).map(cat=>{
+            const catItems = activeItems.filter(i=>i.category===cat);
+            if(catItems.length===0) return null;
+            return (
+              <div key={cat} className="mb-3">
+                <div className="bg-gray-200 p-2 rounded flex justify-between cursor-pointer" onClick={()=>toggleCollapse(cat)}>
+                  <span>{cat} ({catItems.length})</span>
+                  <span>{collapsed[cat]?"▲":"▼"}</span>
+                </div>
+                {!collapsed[cat] && catItems.map(item => {
+                  const expireStatus = getExpireStatus(item.expireDate);
+                  return (
+                    <div key={item.id} className="bg-white p-4 rounded shadow mt-1">
+                      {item.image && <img src={item.image} className="w-32 h-32 object-cover rounded mb-2"/>}
+                      <p className="font-bold">{item.name} {expireStatus && <span className="text-red-600">{expireStatus}</span>}</p>
+                      <p>价格：{item.price}</p>
+                      <p>购买日期：{item.purchaseDate}</p>
+                      {item.expireDate && <p>到期日期：{item.expireDate}</p>}
+                      {item.type==="consume" && <p>已使用次数：{item.usedCount} / {item.quantity}</p>}
+                      <p>每日成本：{dailyCost(item)}</p>
+                      <p>单次成本：{onceCost(item)}</p>
 
-  return (
-    <div key={cat} className="mb-3">
-      {/* 分类折叠标题栏 */}
-      <div
-        className="bg-gray-200 p-2 rounded flex justify-between cursor-pointer"
-        onClick={() => toggleCollapse(cat)}
-      >
-        <span>{cat} ({catItems.length})</span>
-        <span>{collapsed[cat] ? "▲" : "▼"}</span>
-      </div>
+                      {/* 附属成本 */}
+                      {item.subCosts?.length > 0 && (
+                        <div className="mt-2 border-t pt-2">
+                          <p className="font-semibold">附属成本：</p>
+                          {item.subCosts.map(sc=>(
+                            <div key={sc.id} className="flex justify-between items-center">
+                              <span>{sc.name}: ¥{sc.price} ({sc.date})</span>
+                              <button onClick={()=>removeSubCost(item.id, sc.id)} className="text-red-500 px-2">删除</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-      {/* 折叠内容 */}
-      {!collapsed[cat] && catItems.map(item => {
-        const expireStatus = getExpireStatus(item.expireDate);
-        return (
-          <div key={item.id} className="bg-white p-4 rounded shadow mt-1 space-y-1">
-            {/* 名称和到期状态 */}
-            <p className="font-bold">
-              {item.name} {expireStatus && <span className="text-red-600">({expireStatus})</span>}
-            </p>
-
-            {/* 价格 */}
-            <p>价格：{item.price}</p>
-
-            {/* 购买日期 + 提示文字 */}
-            <p>
-              购买日期：<span className="text-gray-500 text-sm">{item.purchaseDate || "未填写"}</span>
-            </p>
-
-            {/* 到期日期 + 提示文字 */}
-            <p>
-              到期日期：<span className="text-gray-500 text-sm">{item.expireDate || "无到期时间"}</span>
-            </p>
-
-            {/* 消耗品信息 */}
-            {item.type === "consume" && (
-              <p>已使用次数：{item.usedCount || 0} / {item.quantity || "未填写"}</p>
-            )}
-
-            {/* 编辑 / 删除按钮 */}
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => startEdit(item)}
-                className="bg-yellow-400 px-3 py-1 rounded"
-              >
-                编辑
-              </button>
-              <button
-                onClick={() => setItems(items.filter(i => i.id !== item.id))}
-                className="bg-red-500 text-white px-3 py-1 rounded"
-              >
-                删除
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-})}
-
-      {/* ---------------- 每日穿搭页 ---------------- */}
-      {page==="outfits" && (
-        <div>
-          <h2 className="text-xl font-semibold mb-3">选择今日穿搭</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {activeItems.map(item => (
-              <div key={item.id} className={`p-3 rounded border cursor-pointer ${todayOutfit.includes(item.id) ? "bg-green-200 border-green-400" : "bg-white border-gray-300"}`} onClick={()=>toggleOutfitItem(item.id)}>
-                <p className="font-bold">{item.name}</p>
-                <p className="text-sm text-gray-500">{item.category}</p>
-                {item.type==="consume" && <p className="text-xs text-blue-600">已使用次数：{item.usedCount}</p>}
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={()=>startEdit(item)} className="bg-yellow-400 px-3 py-1 rounded">编辑</button>
+                        <button onClick={()=>moveToTrash(item.id)} className="bg-red-500 text-white px-3 py-1 rounded">删除</button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            )
+          })}
+
+          {/* 垃圾箱 */}
+          {trashItems.length>0 && (
+            <div className="mt-6">
+              <h2 className="text-xl font-semibold mb-2">垃圾箱</h2>
+              {trashItems.map(item=>(
+                <div key={item.id} className="bg-gray-200 p-2 rounded flex justify-between items-center mb-1">
+                  <span>{item.name}</span>
+                  <div>
+                    <button onClick={()=>restoreItem(item.id)} className="bg-green-500 text-white px-2 py-1 rounded mr-2">恢复</button>
+                    <button onClick={()=>deleteItem(item.id)} className="bg-red-700 text-white px-2 py-1 rounded">永久删除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* ---------------- 历史穿搭页 ---------------- */}
-      {page==="history" && (
+      {page==="outfit" && (
         <div>
-          <h2 className="text-xl font-semibold mb-3">过往穿搭日志</h2>
-          {Object.keys(outfits).sort((a,b)=>b.localeCompare(a)).map(date=>{
-            const ids = outfits[date];
-            if(ids.length===0) return null;
-            return (
-              <div key={date} className="mb-4 p-3 bg-white rounded shadow">
-                <p className="font-semibold">{date}</p>
-                <ul className="list-disc pl-5">
-                  {ids.map(id=>{
-                    const item = items.find(i=>i.id===id);
-                    return item ? <li key={id}>{item.name} ({item.category})</li> : null;
-                  })}
-                </ul>
-              </div>
-            );
-          })}
+          <h2 className="text-xl font-semibold mb-2">选择今日穿搭</h2>
+          {activeItems.map(item=>(
+            <div key={item.id} className={`p-2 mb-1 rounded cursor-pointer ${todayOutfit.includes(item.id)?"bg-blue-200":"bg-white"}`} onClick={()=>toggleOutfit(item.id)}>
+              {item.name} {item.type==="consume" && `(${item.usedCount}/${item.quantity})`}
+            </div>
+          ))}
+          <button onClick={saveTodayOutfit} className="bg-green-500 text-white px-4 py-2 rounded mt-2">保存今日穿搭</button>
+
+          <h2 className="text-xl font-semibold mt-4 mb-2">穿搭历史</h2>
+          {outfitHistory.map(oh=>(
+            <div key={oh.date} className="bg-gray-200 p-2 rounded mb-1">
+              <p>{oh.date}: {oh.items.map(id=>items.find(i=>i.id===id)?.name).join(", ")}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>
