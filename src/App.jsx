@@ -315,31 +315,163 @@ export default function App() {
           </div>
 
           {/* 表单 */}
-          <div className="bg-white p-5 rounded-xl shadow mb-6 space-y-3">
-            <h2 className="text-xl font-semibold">{editingId ? "编辑物品" : "添加物品"}</h2>
-            {editingId && <button onClick={resetForm} className="bg-gray-400 text-white p-2 rounded w-full">取消编辑</button>}
-            
-            <input className="border p-2 w-full rounded" placeholder="名称" value={name} onChange={e => setName(e.target.value)} />
-            <input className="border p-2 w-full rounded" placeholder="价格" type="number" value={price} onChange={e => setPrice(e.target.value)} />
-            <input className="border p-2 w-full rounded" type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} />
-            <input className="border p-2 w-full rounded" type="date" placeholder="到期日期（可选）" value={expireDate} onChange={e => setExpireDate(e.target.value)} />
-            <select className="border p-2 w-full rounded" value={type} onChange={e => setType(e.target.value)}>
-              <option value="long">长期物品</option>
-              <option value="consume">消耗品</option>
-            </select>
-            <input className="border p-2 w-full rounded" placeholder="物品类型（可自定义）" value={category} onChange={e=>setCategory(e.target.value)} />
-            
-            {type === "consume" && <>
-              <input className="border p-2 w-full rounded" placeholder="总数量（可选）" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} />
-              <input className="border p-2 w-full rounded" placeholder="已使用次数（可选）" type="number" value={usedCount} onChange={e => setUsedCount(e.target.value)} />
-            </>}
+{/* 表单 */}
+<div className="bg-white p-5 rounded-xl shadow mb-6 space-y-3">
+  <h2 className="text-xl font-semibold">{editingId ? "编辑物品" : "添加物品"}</h2>
+  {editingId && (
+    <button onClick={resetForm} className="bg-gray-400 text-white p-2 rounded w-full">
+      取消编辑
+    </button>
+  )}
 
-            <input type="file" accept="image/*" onChange={handleImageUpload}/>
-            {ocrLoading && <p className="text-blue-500">识别中...</p>}
-            {image && <div className="flex items-center gap-2 mt-2">
-              <img src={image} className="w-24 h-24 object-cover rounded"/>
-              <button onClick={()=>setImage(null)} className="bg-red-500 text-white px-2 py-1 rounded">删除图片</button>
-            </div>}
+  <input
+    className="border p-2 w-full rounded"
+    placeholder="名称"
+    value={name}
+    onChange={e => setName(e.target.value)}
+  />
+  <input
+    className="border p-2 w-full rounded"
+    placeholder="价格"
+    type="number"
+    value={price}
+    onChange={e => setPrice(e.target.value)}
+  />
+
+  <div className="flex flex-col">
+    <label className="mb-1 font-semibold">购买日期：</label>
+    <input
+      className="border p-2 w-full rounded"
+      type="date"
+      value={purchaseDate}
+      onChange={e => setPurchaseDate(e.target.value)}
+    />
+  </div>
+
+  <div className="flex flex-col mt-2">
+    <label className="mb-1 font-semibold">到期日期（可选）：</label>
+    <input
+      className="border p-2 w-full rounded"
+      type="date"
+      value={expireDate}
+      onChange={e => setExpireDate(e.target.value)}
+    />
+  </div>
+
+  <select className="border p-2 w-full rounded" value={type} onChange={e => setType(e.target.value)}>
+    <option value="long">长期物品</option>
+    <option value="consume">消耗品</option>
+  </select>
+  <input
+    className="border p-2 w-full rounded"
+    placeholder="物品类型（可自定义）"
+    value={category}
+    onChange={e => setCategory(e.target.value)}
+  />
+
+  {type === "consume" && (
+    <>
+      <input
+        className="border p-2 w-full rounded"
+        placeholder="总数量（可选）"
+        type="number"
+        value={quantity}
+        onChange={e => setQuantity(e.target.value)}
+      />
+      <input
+        className="border p-2 w-full rounded"
+        placeholder="已使用次数（可选）"
+        type="number"
+        value={usedCount}
+        onChange={e => setUsedCount(e.target.value)}
+      />
+    </>
+  )}
+
+  <input type="file" accept="image/*" onChange={handleImageUpload} />
+  {ocrLoading && <p className="text-blue-500">识别中...</p>}
+  {image && (
+    <div className="flex items-center gap-2 mt-2">
+      <img src={image} className="w-24 h-24 object-cover rounded" />
+      <button
+        onClick={() => { URL.revokeObjectURL(image); setImage(null); }}
+        className="bg-red-500 text-white px-2 py-1 rounded"
+      >
+        删除图片
+      </button>
+    </div>
+  )}
+
+  {/* 附属成本 */}
+  {editingId && (
+    <div className="border-t pt-3 space-y-2">
+      <h3 className="font-semibold">附属成本</h3>
+
+      {/* 输入框 */}
+      <div className="flex gap-2">
+        <input
+          className="border p-2 rounded flex-1"
+          placeholder="附属成本名称"
+          value={subCostName}
+          onChange={e => setSubCostName(e.target.value)}
+        />
+        <input
+          className="border p-2 rounded w-24"
+          placeholder="价格"
+          type="number"
+          value={subCostPrice}
+          onChange={e => setSubCostPrice(e.target.value)}
+        />
+        <input
+          className="border p-2 rounded w-36"
+          type="date"
+          value={subCostDate}
+          onChange={e => setSubCostDate(e.target.value)}
+        />
+        <button
+          onClick={addOrUpdateSubCost}
+          className="bg-green-500 text-white px-2 py-1 rounded"
+        >
+          {editingSubCostId ? "保存修改" : "添加"}
+        </button>
+      </div>
+
+      {/* 附属成本列表 */}
+      {items.find(i => i.id === editingId)?.subCosts?.map(sc => (
+        <div key={sc.id} className="flex justify-between items-center">
+          <span>{sc.name} ¥{sc.price} ({sc.date})</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => {
+                setSubCostName(sc.name);
+                setSubCostPrice(String(sc.price));
+                setSubCostDate(sc.date);
+                setEditingSubCostId(sc.id);
+              }}
+              className="text-blue-500"
+            >
+              编辑
+            </button>
+            <button
+              onClick={() => removeSubCost(editingId, sc.id)}
+              className="text-red-500"
+            >
+              删除
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  <button
+    onClick={addOrUpdateItem}
+    className="bg-blue-500 text-white p-2 rounded w-full mt-3"
+  >
+    {editingId ? "保存修改" : "添加物品"}
+  </button>
+</div>
+
 
             {/* 附属成本 */}
             {editingId && (
