@@ -1,230 +1,102 @@
 import React, { useState, useEffect, useRef } from "react";
-
-// ========== 版本配置 ==========
-const CURRENT_VERSION = "4.0.0";
-const VERSION_STORAGE_KEY = "MY_APP_VERSION";
-const REMOTE_VERSION_URL = "https://raw.githubusercontent.com/your-username/your-repo/main/version.json"; // 替换为你的版本文件地址
+import ItemForm from "./components/ItemForm";
+import ItemCard from "./components/ItemCard";
+import TransactionForm from "./components/TransactionForm";
+import { 
+  CURRENT_VERSION, 
+  VERSION_STORAGE_KEY, 
+  REMOTE_VERSION_URL,
+  STORAGE_KEYS,
+  DEFAULT_CATEGORIES
+} from "./constants";
+import { 
+  safeParseStorage, 
+  getFinanceStats 
+} from "./utils";
 
 export default function App() {
   // ========== 核心状态 ==========
-  // 物品数据
-  const [items, setItems] = useState(() => {
-    try {
-      const saved = localStorage.getItem("MY_LIFE_COST_ITEMS");
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.log("读取物品数据失败，使用空列表", e);
-      return [];
-    }
-  });
+  const [items, setItems] = useState(() => 
+    safeParseStorage(STORAGE_KEYS.ITEMS, [])
+  );
 
-  // 穿搭记录
-  const [outfitHistory, setOutfitHistory] = useState(() => {
-    try {
-      const saved = localStorage.getItem("MY_OUTFIT_HISTORY");
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.log("读取穿搭数据失败，使用空列表", e);
-      return [];
-    }
-  });
+  const [outfitHistory, setOutfitHistory] = useState(() => 
+    safeParseStorage(STORAGE_KEYS.OUTFIT_HISTORY, [])
+  );
 
-  // 记账数据
-  const [transactions, setTransactions] = useState(() => {
-    try {
-      const saved = localStorage.getItem("MY_TRANSACTIONS");
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.log("读取记账数据失败，使用空列表", e);
-      return [];
-    }
-  });
+  const [transactions, setTransactions] = useState(() => 
+    safeParseStorage(STORAGE_KEYS.TRANSACTIONS, [])
+  );
 
-  // 分类数据（持久化存储）
-  const [categories, setCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem("MY_APP_CATEGORIES");
-      return saved ? JSON.parse(saved) : ["服饰", "电子产品", "食品", "日用品", "其他"];
-    } catch (e) {
-      console.log("读取分类数据失败，使用默认分类", e);
-      return ["服饰", "电子产品", "食品", "日用品", "其他"];
-    }
-  });
+  const [categories, setCategories] = useState(() => 
+    safeParseStorage(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES)
+  );
 
-  // 最近使用的分类
-  const [recentCategory, setRecentCategory] = useState(() => {
-    try {
-      return localStorage.getItem("MY_APP_RECENT_CATEGORY") || "服饰";
-    } catch (e) {
-      return "服饰";
-    }
-  });
-
-  // ========== 表单状态 ==========
-  // 物品添加表单
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState("");
-  const [expireDate, setExpireDate] = useState("");
-  const [type, setType] = useState("long");
-  const [category, setCategory] = useState("");
-  const [customCategory, setCustomCategory] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [usedCount, setUsedCount] = useState("");
-  const [additionalCosts, setAdditionalCosts] = useState([]);
-  const [image, setImage] = useState(null);
-
-  // 计算器相关状态
-  const [calculatorValue, setCalculatorValue] = useState("");
-  const [showCalculator, setShowCalculator] = useState(false);
-  
-  // 编辑弹窗状态
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [currentEditItem, setCurrentEditItem] = useState(null);
-  // 编辑物品的计算器状态
-  const [editCalculatorValue, setEditCalculatorValue] = useState("");
-  const [showEditCalculator, setShowEditCalculator] = useState(false);
-
-  // 记账表单状态
-  const [transType, setTransType] = useState("expense"); // expense | income
-  const [transAmount, setTransAmount] = useState("");
-  const [transCategory, setTransCategory] = useState("日常消费");
-  const [transDate, setTransDate] = useState(new Date().toISOString().split("T")[0]);
-  const [transNote, setTransNote] = useState("");
+  const [recentCategory, setRecentCategory] = useState(() => 
+    localStorage.getItem(STORAGE_KEYS.RECENT_CATEGORY) || "服饰"
+  );
 
   // ========== 辅助状态 ==========
-  const [activeTab, setActiveTab] = useState("items"); // items | outfit | finance
+  const [activeTab, setActiveTab] = useState("items");
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("全部");
-  const [collapsed, setCollapsed] = useState({}); // 分类折叠状态
-  const [itemCollapsed, setItemCollapsed] = useState({}); // 物品卡片折叠状态
+  const [collapsed, setCollapsed] = useState({});
   const [selectedOutfitItems, setSelectedOutfitItems] = useState([]);
   const [showUpdateAlert, setShowUpdateAlert] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [newVersion, setNewVersion] = useState("");
   const [importFile, setImportFile] = useState(null);
   const [importStatus, setImportStatus] = useState("");
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [currentEditItem, setCurrentEditItem] = useState(null);
   
   // 文件导入ref
   const fileInputRef = useRef(null);
 
-  // ========== 计算器功能函数 ==========
-  // 处理计算器按键点击
-  const handleCalculatorKeyPress = (key) => {
-    if (key === "C") {
-      setCalculatorValue("");
-      setPrice("");
-    } else if (key === "=") {
-      try {
-        // 使用eval计算表达式，添加安全处理
-        const sanitized = calculatorValue
-          .replace(/[^0-9+\-*/.()]/g, "")
-          .replace(/(\d+)\.(\d*)\./g, "$1.$2") // 防止多个小数点
-          .replace(/(\+|\-|\*|\/){2,}/g, "$1"); // 防止多个运算符
-        
-        if (sanitized) {
-          const result = eval(sanitized);
-          setCalculatorValue(result.toString());
-          setPrice(result.toString());
-        }
-      } catch (e) {
-        setCalculatorValue("错误");
-      }
-    } else {
-      setCalculatorValue(prev => prev === "错误" ? key : prev + key);
-    }
-  };
-
-  // 处理编辑物品的计算器按键点击
-  const handleEditCalculatorKeyPress = (key) => {
-    if (key === "C") {
-      setEditCalculatorValue("");
-      setCurrentEditItem(prev => ({ ...prev, price: "" }));
-    } else if (key === "=") {
-      try {
-        const sanitized = editCalculatorValue
-          .replace(/[^0-9+\-*/.()]/g, "")
-          .replace(/(\d+)\.(\d*)\./g, "$1.$2")
-          .replace(/(\+|\-|\*|\/){2,}/g, "$1");
-        
-        if (sanitized) {
-          const result = eval(sanitized);
-          setEditCalculatorValue(result.toString());
-          setCurrentEditItem(prev => ({ ...prev, price: result }));
-        }
-      } catch (e) {
-        setEditCalculatorValue("错误");
-      }
-    } else {
-      setEditCalculatorValue(prev => prev === "错误" ? key : prev + key);
-    }
-  };
-
   // ========== 本地存储 ==========
   useEffect(() => {
-    localStorage.setItem("MY_LIFE_COST_ITEMS", JSON.stringify(items));
+    localStorage.setItem(STORAGE_KEYS.ITEMS, JSON.stringify(items));
   }, [items]);
 
   useEffect(() => {
-    localStorage.setItem("MY_OUTFIT_HISTORY", JSON.stringify(outfitHistory));
+    localStorage.setItem(STORAGE_KEYS.OUTFIT_HISTORY, JSON.stringify(outfitHistory));
   }, [outfitHistory]);
 
   useEffect(() => {
-    localStorage.setItem("MY_TRANSACTIONS", JSON.stringify(transactions));
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
   }, [transactions]);
 
   useEffect(() => {
-    localStorage.setItem("MY_APP_CATEGORIES", JSON.stringify(categories));
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
   }, [categories]);
 
   useEffect(() => {
-    localStorage.setItem("MY_APP_RECENT_CATEGORY", recentCategory);
+    localStorage.setItem(STORAGE_KEYS.RECENT_CATEGORY, recentCategory);
   }, [recentCategory]);
 
   // ========== 初始化 ==========
   useEffect(() => {
-    // 1. 手动读取本地存储的初始物品（不依赖items变量，避免重复执行）
-    const savedItems = JSON.parse(localStorage.getItem("MY_LIFE_COST_ITEMS") || "[]");
-    // 手动读取本地存储的分类（避免依赖categories变量）
-    const savedCategories = JSON.parse(localStorage.getItem("MY_APP_CATEGORIES") || '["服饰", "电子产品", "食品", "日用品", "其他"]');
-    
-    // 2. 初始化分类折叠状态（全部折叠）
+    // 初始化分类折叠状态
     const initialCollapsed = {};
-    savedCategories.forEach(cat => {
+    categories.forEach(cat => {
       initialCollapsed[cat] = true;
     });
     setCollapsed(initialCollapsed);
 
-    // 3. 初始化物品卡片折叠状态（仅首次打开APP时的物品折叠）
-    const initialItemCollapsed = {};
-    savedItems.forEach(item => {
-      initialItemCollapsed[item.id] = true; // 仅首次加载的物品折叠
-    });
-    setItemCollapsed(initialItemCollapsed);
-
-    // 4. 设置最近使用的分类
-    const savedRecentCategory = localStorage.getItem("MY_APP_RECENT_CATEGORY") || "服饰";
-    setCategory(savedRecentCategory);
-
-    // 5. 检查版本更新
+    // 检查版本更新
     checkVersionUpdate();
 
-    // 6. 检查本地版本
+    // 检查本地版本
     const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY) || "1.0.0";
     if (savedVersion !== CURRENT_VERSION) {
       localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
     }
-  }, []); // ✅ 关键：空数组 = 仅组件首次挂载时执行一次，后续永不触发
+  }, [categories]);
 
   // ========== 版本更新检查 ==========
   const checkVersionUpdate = async () => {
     try {
-      // 如果你没有远程版本文件，可以注释掉这段，改用本地版本对比
-      // const response = await fetch(REMOTE_VERSION_URL);
-      // const versionData = await response.json();
-      // const latestVersion = versionData.latestVersion;
-      
-      // 本地版本模拟（实际使用时替换为上面的远程请求）
+      // 本地版本模拟
       const latestVersion = "4.0.0";
       
       if (latestVersion !== CURRENT_VERSION) {
@@ -237,7 +109,6 @@ export default function App() {
   };
 
   const performUpdate = () => {
-    // 实际更新逻辑：刷新页面 + 清除旧数据缓存
     localStorage.removeItem(VERSION_STORAGE_KEY);
     window.location.reload();
     setShowUpdateAlert(true);
@@ -278,19 +149,18 @@ export default function App() {
       try {
         const importedData = JSON.parse(e.target.result);
         
-        // 验证数据格式
         if (!importedData || typeof importedData !== "object") {
           setImportStatus("错误：无效的文件格式");
           return;
         }
 
-        // 合并数据（保留现有数据，新增数据追加）
+        // 合并数据
         const mergedItems = [...items];
         const mergedOutfits = [...outfitHistory];
         const mergedTransactions = [...transactions];
         const mergedCategories = [...new Set([...categories, ...(importedData.categories || [])])];
 
-        // 添加新物品（避免重复）
+        // 添加新物品
         if (Array.isArray(importedData.items)) {
           importedData.items.forEach(item => {
             if (item.id && !mergedItems.some(i => i.id === item.id)) {
@@ -337,252 +207,52 @@ export default function App() {
   };
 
   // ========== 工具函数 ==========
-  const allCategories = [...categories];
-  
-  // 记账分类
-  const transCategories = {
-    expense: ["日常消费", "餐饮", "购物", "交通", "娱乐", "房租", "水电费", "其他支出"],
-    income: ["工资", "兼职", "理财", "红包", "其他收入"]
-  };
-
-  // 切换分类折叠
   const toggleCollapse = (cat) => {
     setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
-  // 切换物品卡片折叠
-  const toggleItemCollapse = (itemId) => {
-    setItemCollapsed(prev => ({ ...prev, [itemId]: !prev[itemId] }));
-  };
-
-  // 删除分类
   const deleteCategory = (catToDelete) => {
     if (window.confirm(`确定删除分类"${catToDelete}"吗？该分类下的物品不会被删除。`)) {
       const newCategories = categories.filter(cat => cat !== catToDelete);
       setCategories(newCategories);
       
-      // 如果删除的是当前选中的分类，切换到最近使用的分类
-      if (category === catToDelete) {
-        setCategory(recentCategory);
-      }
-      
-      // 如果删除的是筛选分类，重置筛选
       if (filterCategory === catToDelete) {
         setFilterCategory("全部");
       }
     }
   };
 
-  // 添加自定义分类
   const addCustomCategory = (newCat) => {
     if (newCat && !categories.includes(newCat)) {
       setCategories([...categories, newCat]);
     }
   };
 
-  const getTotalCost = (item) => {
-    const basePrice = item.price || 0;
-    const extraCost = (item.additionalCosts || []).reduce((sum, curr) => sum + (curr.amt || 0), 0);
-    return basePrice + extraCost;
-  };
-
-  const getDayCost = (item) => {
-    if (!item.purchaseDate) return "0.00";
-    const buyDate = new Date(item.purchaseDate);
-    const today = new Date();
-    const days = Math.max(1, Math.floor((today - buyDate) / (1000 * 60 * 60 * 24)));
-    return (getTotalCost(item) / days).toFixed(2);
-  };
-
-  const getUseCost = (item) => {
-    if (item.type !== "consume") return "0.00";
-    const total = getTotalCost(item);
-    const count = Math.max(1, item.usedCount || 0);
-    return (total / count).toFixed(2);
-  };
-
-  // 计算剩余数量
-  const getRemainingQuantity = (item) => {
-    if (item.type !== "consume" || !item.quantity) return "-";
-    const remaining = Math.max(0, item.quantity - (item.usedCount || 0));
-    return `${remaining}/${item.quantity}`;
-  };
-
-  // 记账统计
-  const getFinanceStats = () => {
-    const totalExpense = transactions
-      .filter(t => t.type === "expense")
-      .reduce((sum, t) => sum + Number(t.amount), 0)
-      .toFixed(2);
-    
-    const totalIncome = transactions
-      .filter(t => t.type === "income")
-      .reduce((sum, t) => sum + Number(t.amount), 0)
-      .toFixed(2);
-    
-    const balance = (totalIncome - totalExpense).toFixed(2);
-    
-    return { totalExpense, totalIncome, balance };
-  };
-
-  // ========== 物品操作功能 ==========
-  // 重置添加表单
-  const resetAddForm = () => {
-    setName("");
-    setPrice("");
-    setCalculatorValue("");
-    setShowCalculator(false);
-    setPurchaseDate("");
-    setExpireDate("");
-    setType("long");
-    setCategory(recentCategory); // 恢复为最近使用的分类
-    setCustomCategory("");
-    setQuantity("");
-    setUsedCount("");
-    setAdditionalCosts([]);
-    setImage(null);
-  };
-
-  // 添加物品
-  const addItem = () => {
-    if (!name || !price || !purchaseDate) {
-      alert("请填写名称、价格和购买日期（必填项）");
-      return;
-    }
-
-    let finalCategory = category;
-    if (category === "自定义") {
-      finalCategory = customCategory.trim();
-      if (!finalCategory) {
-        alert("请输入自定义分类名称");
-        return;
-      }
-      // 添加新分类到分类列表
-      addCustomCategory(finalCategory);
-    }
-
+  // ========== 物品操作 ==========
+  const handleAddItem = (itemData, finalCategory) => {
     // 记忆本次选择的分类
     setRecentCategory(finalCategory);
-
-    const itemData = {
-      id: Date.now(),
-      name,
-      price: Number(price),
-      purchaseDate,
-      expireDate: expireDate || "",
-      type,
-      category: finalCategory,
-      quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
-      usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
-      additionalCosts: [...additionalCosts],
-      isFinished: false,
-      inTrash: false,
-      image: image || null
-    };
-
+    
+    // 添加新物品
     setItems([...items, itemData]);
-    resetAddForm();
     
-    // ✅ 新增：新物品默认展开（false = 展开）
-    setItemCollapsed(prev => ({
-      ...prev,
-      [itemData.id]: false // 关键：新添加的物品不折叠
-    }));
-    
-    // 更新折叠状态 - 新分类默认折叠
+    // 新分类默认折叠
     setCollapsed(prev => ({ ...prev, [finalCategory]: true }));
+    
+    // 添加新分类
+    addCustomCategory(finalCategory);
   };
 
-  // 打开编辑弹窗
-  const openEditModal = (item) => {
-    setCurrentEditItem({ ...item });
-    setEditCalculatorValue(item.price?.toString() || "");
-    setEditModalVisible(true);
-  };
-
-  // 保存编辑
-  const saveEdit = () => {
-    if (!currentEditItem?.name || currentEditItem?.price === undefined || !currentEditItem?.purchaseDate) {
-      alert("请填写名称、价格和购买日期（必填项）");
-      return;
-    }
-
-    // 如果修改了分类，添加到分类列表
-    if (currentEditItem.category && !categories.includes(currentEditItem.category)) {
-      addCustomCategory(currentEditItem.category);
-    }
-
+  const handleEditItem = (updatedItem, finalCategory) => {
     setItems(items.map(item => 
-      item.id === currentEditItem.id ? { ...currentEditItem } : item
+      item.id === updatedItem.id ? { ...updatedItem } : item
     ));
     setEditModalVisible(false);
-    setShowEditCalculator(false);
+    
+    // 添加新分类
+    addCustomCategory(finalCategory);
   };
 
-  // 添加附加成本
-  const addAdditionalCost = () => {
-    const desc = prompt("请输入附加成本描述（如：运费、安装费）：");
-    const amt = prompt("请输入附加成本金额（元）：");
-    if (!desc || !amt || isNaN(Number(amt))) {
-      alert("描述不能为空，金额必须是数字！");
-      return;
-    }
-    setAdditionalCosts(prev => [...prev, { desc, amt: Number(amt) }]);
-  };
-
-  // 编辑物品的附加成本
-  const addEditAdditionalCost = () => {
-    const desc = prompt("请输入附加成本描述（如：运费、安装费）：");
-    const amt = prompt("请输入附加成本金额（元）：");
-    if (!desc || !amt || isNaN(Number(amt))) {
-      alert("描述不能为空，金额必须是数字！");
-      return;
-    }
-    setCurrentEditItem(prev => ({
-      ...prev,
-      additionalCosts: [...(prev.additionalCosts || []), { desc, amt: Number(amt) }]
-    }));
-  };
-
-  const removeAdditionalCost = (index) => {
-    setAdditionalCosts(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const removeEditAdditionalCost = (index) => {
-    setCurrentEditItem(prev => ({
-      ...prev,
-      additionalCosts: prev.additionalCosts.filter((_, i) => i !== index)
-    }));
-  };
-
-  // 处理图片上传
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setImage(url);
-  };
-
-  const handleEditImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setCurrentEditItem(prev => ({ ...prev, image: url }));
-  };
-
-  const removeImage = () => {
-    if (window.confirm("确定删除这张图片吗？")) {
-      setImage(null);
-    }
-  };
-
-  const removeEditImage = () => {
-    if (window.confirm("确定删除这张图片吗？")) {
-      setCurrentEditItem(prev => ({ ...prev, image: null }));
-    }
-  };
-
-  // ========== 消耗品专属功能 ==========
   const handleUseOnce = (itemId) => {
     setItems(items.map(item => {
       if (item.id === itemId) {
@@ -608,7 +278,13 @@ export default function App() {
     }
   };
 
-  // ========== 每日穿搭专属功能 ==========
+  const handleDeleteItem = (itemId) => {
+    if (window.confirm("确定删除该物品吗？删除后无法恢复！")) {
+      setItems(items.filter(i => i.id !== itemId));
+    }
+  };
+
+  // ========== 穿搭功能 ==========
   const outfitAvailableItems = items.filter(item => 
     item.category === "服饰" && 
     item.type === "consume" && 
@@ -632,6 +308,7 @@ export default function App() {
 
     const today = new Date().toISOString().split("T")[0];
     
+    // 更新物品使用次数
     const updatedItems = items.map(item => {
       if (selectedOutfitItems.includes(item.id) && !item.isFinished) {
         return { ...item, usedCount: (item.usedCount || 0) + 1 };
@@ -640,6 +317,7 @@ export default function App() {
     });
     setItems(updatedItems);
 
+    // 保存穿搭记录
     const newRecord = {
       date: today,
       itemIds: selectedOutfitItems,
@@ -666,27 +344,8 @@ export default function App() {
   };
 
   // ========== 记账功能 ==========
-  const addTransaction = () => {
-    if (!transAmount || isNaN(Number(transAmount)) || Number(transAmount) <= 0) {
-      alert("请输入有效的金额");
-      return;
-    }
-
-    const newTrans = {
-      id: Date.now(),
-      type: transType,
-      amount: Number(transAmount),
-      category: transCategory,
-      date: transDate,
-      note: transNote
-    };
-
+  const handleAddTransaction = (newTrans) => {
     setTransactions([...transactions, newTrans]);
-    
-    // 重置表单
-    setTransAmount("");
-    setTransNote("");
-    setTransDate(new Date().toISOString().split("T")[0]);
   };
 
   const deleteTransaction = (id) => {
@@ -707,11 +366,11 @@ export default function App() {
     return acc;
   }, {});
 
-  // 筛选记账记录
   const filteredTransactions = transactions
     .filter(t => t.note.toLowerCase().includes(search.toLowerCase()) || t.category.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
+  // ========== 渲染 ==========
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 max-w-5xl mx-auto">
       {/* 版本更新提醒 */}
@@ -845,7 +504,7 @@ export default function App() {
               className="px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
             >
               <option value="全部">全部分类</option>
-              {allCategories.map(cat => (
+              {categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
@@ -856,246 +515,11 @@ export default function App() {
             <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2 border-gray-100">
               添加新物品
             </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-600 mb-1">物品名称 <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="如：纯棉T恤、无线鼠标"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-600 mb-1">价格（元） <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={price}
-                    onChange={(e) => {
-                      setPrice(e.target.value);
-                      setCalculatorValue(e.target.value);
-                    }}
-                    placeholder="0.00 或输入计算公式（如：100+20*2）"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 pr-20"
-                  />
-                  <button
-                    onClick={() => setShowCalculator(!showCalculator)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-sm"
-                  >
-                    {showCalculator ? "收起计算器" : "使用计算器"}
-                  </button>
-                </div>
-                
-                {/* 计算器面板 */}
-                {showCalculator && (
-                  <div className="mt-2 bg-gray-100 rounded-md p-3">
-                    <div className="mb-2 bg-white p-2 rounded text-right font-mono overflow-x-auto">
-                      {calculatorValue || "0"}
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+", "(", ")", "C"].map(key => (
-                        <button
-                          key={key}
-                          onClick={() => handleCalculatorKeyPress(key)}
-                          className={`py-2 px-1 rounded ${
-                            key === "C" ? "bg-red-100 text-red-700" :
-                            key === "=" ? "bg-green-100 text-green-700" :
-                            ["+", "-", "*", "/", "(", ")"].includes(key) ? "bg-yellow-100 text-yellow-700" :
-                            "bg-white text-gray-800"
-                          }`}
-                        >
-                          {key}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">购买日期 <span className="text-red-500">*</span></label>
-                <input
-                  type="date"
-                  value={purchaseDate}
-                  onChange={(e) => setPurchaseDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">到期日期（可选）</label>
-                <input
-                  type="date"
-                  value={expireDate}
-                  onChange={(e) => setExpireDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-                >
-                  <option value="long">长期物品（如电器、家具）</option>
-                  <option value="consume">消耗品（如服饰、食品、日用品）</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span>
-                  <button 
-                    onClick={() => setCategory("自定义")}
-                    className="ml-2 text-xs text-blue-500 hover:text-blue-700"
-                  >
-                    管理分类
-                  </button>
-                </label>
-                
-                {/* 分类选择与管理 */}
-                <div className="mb-2">
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {allCategories.map(cat => (
-                      <div key={cat} className="flex items-center bg-gray-100 rounded px-2 py-1">
-                        <button
-                          onClick={() => setCategory(cat)}
-                          className={`text-xs ${category === cat ? "font-bold text-blue-600" : "text-gray-700"}`}
-                        >
-                          {cat}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteCategory(cat);
-                          }}
-                          className="ml-1 text-xs text-red-500 hover:text-red-700"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <select
-                    value={category}
-                    onChange={(e) => {
-                      setCategory(e.target.value);
-                      if (e.target.value !== "自定义") setCustomCategory("");
-                    }}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-                  >
-                    {allCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                    <option value="自定义">自定义分类</option>
-                  </select>
-                  
-                  {category === "自定义" && (
-                    <input
-                      type="text"
-                      placeholder="输入自定义分类名称"
-                      value={customCategory}
-                      onChange={(e) => setCustomCategory(e.target.value)}
-                      className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  )}
-                </div>
-              </div>
-
-              {type === "consume" && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">总数量（可选）</label>
-                    <input
-                      type="number"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
-                      placeholder="如：10片、5件"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">初始使用次数（可选）</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={usedCount}
-                      onChange={(e) => setUsedCount(e.target.value)}
-                      placeholder="默认0次"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-600">附加成本（如运费、安装费）</label>
-                <button
-                  onClick={addAdditionalCost}
-                  className="px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors"
-                >
-                  添加
-                </button>
-              </div>
-
-              {additionalCosts.length > 0 && (
-                <div className="bg-gray-50 rounded-md p-3 mt-2">
-                  {additionalCosts.map((cost, index) => (
-                    <div key={index} className="flex justify-between items-center mb-2 last:mb-0">
-                      <span className="text-sm text-gray-700">{cost.desc}：{cost.amt.toFixed(2)}元</span>
-                      <button
-                        onClick={() => removeAdditionalCost(index)}
-                        className="text-red-500 text-sm hover:text-red-700"
-                      >
-                        删除
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选）</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="w-full"
-              />
-
-              {image && (
-                <div className="mt-3 flex items-center gap-3">
-                  <img
-                    src={image}
-                    alt="物品凭证"
-                    className="w-20 h-20 object-cover rounded-md border border-gray-200"
-                  />
-                  <button
-                    onClick={removeImage}
-                    className="text-sm text-red-500 hover:text-red-700"
-                  >
-                    删除图片
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={addItem}
-              className="w-full mt-6 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
-            >
-              添加物品
-            </button>
+            <ItemForm 
+              categories={categories} 
+              onSubmit={handleAddItem}
+              recentCategory={recentCategory}
+            />
           </div>
 
           {/* 物品列表 */}
@@ -1121,129 +545,18 @@ export default function App() {
                   {!collapsed[category] && (
                     <div className="mt-3 space-y-2">
                       {groupedItems[category].map(item => (
-                        <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-                          {/* 物品卡片折叠头部（精简展示） */}
-                          <div
-                            onClick={() => toggleItemCollapse(item.id)}
-                            className="px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-gray-50"
-                          >
-                            <div className="flex items-center">
-                              <h3 className="font-medium text-gray-800">{item.name}</h3>
-                              {item.type === "consume" && (
-                                <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-                                  item.isFinished
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-green-100 text-green-800"
-                                }`}>
-                                  {item.isFinished ? "已耗尽" : "使用中"}
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="flex items-center gap-4 text-sm">
-                              {item.type === "consume" && item.quantity && (
-                                <span className="text-gray-600">
-                                  剩余：{getRemainingQuantity(item)}
-                                </span>
-                              )}
-                              <span className="text-gray-700 font-medium">
-                                {item.type === "long" ? "日成本" : "次成本"}：¥{item.type === "long" ? getDayCost(item) : getUseCost(item)}
-                              </span>
-                              <span className="text-gray-500">
-                                {itemCollapsed[item.id] ? "▼ 展开" : "▲ 收起"}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 物品卡片展开内容（详细信息） */}
-                          {!itemCollapsed[item.id] && (
-                            <div className="px-4 py-3 border-t border-gray-100">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-sm">
-                                <p className="text-gray-600">
-                                  <span className="font-medium text-gray-700">总价：</span>
-                                  ¥{getTotalCost(item).toFixed(2)}（含附加）
-                                </p>
-                                <p className="text-gray-600">
-                                  <span className="font-medium text-gray-700">购买日期：</span>
-                                  {item.purchaseDate}
-                                </p>
-                                {item.expireDate && (
-                                  <p className="text-gray-600">
-                                    <span className="font-medium text-gray-700">到期日期：</span>
-                                    {item.expireDate}
-                                  </p>
-                                )}
-                                {item.type === "consume" && (
-                                  <p className="text-gray-600">
-                                    <span className="font-medium text-gray-700">已使用：</span>
-                                    {item.usedCount || 0} 次
-                                  </p>
-                                )}
-                              </div>
-
-                              {item.additionalCosts && item.additionalCosts.length > 0 && (
-                                <div className="mb-4 text-sm">
-                                  <details>
-                                    <summary className="font-medium text-gray-700 cursor-pointer">查看附加成本</summary>
-                                    <div className="mt-2 bg-gray-50 rounded-md p-2">
-                                      {item.additionalCosts.map((cost, idx) => (
-                                        <p key={idx} className="text-gray-600">- {cost.desc}：¥{cost.amt.toFixed(2)}</p>
-                                      ))}
-                                    </div>
-                                  </details>
-                                </div>
-                              )}
-
-                              {item.image && (
-                                <div className="mb-4">
-                                  <img
-                                    src={item.image}
-                                    alt={item.name}
-                                    className="w-24 h-24 object-cover rounded-md border border-gray-200"
-                                  />
-                                </div>
-                              )}
-
-                              <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
-                                {item.type === "consume" && !item.isFinished && (
-                                  <>
-                                    <button
-                                      onClick={() => handleUseOnce(item.id)}
-                                      className="px-3 py-1.5 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 transition-colors"
-                                    >
-                                      使用一次（+1）
-                                    </button>
-                                    <button
-                                      onClick={() => handleMarkFinished(item.id)}
-                                      className="px-3 py-1.5 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 transition-colors"
-                                    >
-                                      标记为耗尽
-                                    </button>
-                                  </>
-                                )}
-
-                                <div className="ml-auto flex gap-2">
-                                  <button
-                                    onClick={() => openEditModal(item)}
-                                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 transition-colors"
-                                  >
-                                    编辑
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm("确定删除该物品吗？删除后无法恢复！")) {
-                                        setItems(items.filter(i => i.id !== item.id));
-                                      }
-                                    }}
-                                    className="px-3 py-1.5 bg-gray-200 text-red-600 rounded-md text-sm hover:bg-gray-300 transition-colors"
-                                  >
-                                    删除
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        <ItemCard
+                          key={item.id}
+                          item={item}
+                          onEdit={(item) => {
+                            setCurrentEditItem(item);
+                            setEditModalVisible(true);
+                          }}
+                          onDelete={handleDeleteItem}
+                          onUseOnce={handleUseOnce}
+                          onMarkFinished={handleMarkFinished}
+                          initiallyCollapsed={true}
+                        />
                       ))}
                     </div>
                   )}
@@ -1295,7 +608,7 @@ export default function App() {
                         </div>
                       )}
                       <h3 className="font-medium text-sm text-center">{item.name}</h3>
-                      <p className="text-xs text-gray-500 text-center mt-1">¥{getUseCost(item)}/次</p>
+                      <p className="text-xs text-gray-500 text-center mt-1">¥{(item.price / (item.usedCount + 1)).toFixed(2)}/次</p>
                     </div>
                   ))}
                 </div>
@@ -1356,16 +669,16 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-red-500">
               <h3 className="text-sm text-gray-500 mb-1">总支出</h3>
-              <p className="text-2xl font-bold text-red-600">¥{getFinanceStats().totalExpense}</p>
+              <p className="text-2xl font-bold text-red-600">¥{getFinanceStats(transactions).totalExpense}</p>
             </div>
             <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-green-500">
               <h3 className="text-sm text-gray-500 mb-1">总收入</h3>
-              <p className="text-2xl font-bold text-green-600">¥{getFinanceStats().totalIncome}</p>
+              <p className="text-2xl font-bold text-green-600">¥{getFinanceStats(transactions).totalIncome}</p>
             </div>
             <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500">
               <h3 className="text-sm text-gray-500 mb-1">账户余额</h3>
-              <p className={`text-2xl font-bold ${getFinanceStats().balance >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                ¥{getFinanceStats().balance}
+              <p className={`text-2xl font-bold ${getFinanceStats(transactions).balance >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                ¥{getFinanceStats(transactions).balance}
               </p>
             </div>
           </div>
@@ -1375,88 +688,7 @@ export default function App() {
             <h2 className="text-xl font-semibold text-green-600 mb-4 border-b pb-2 border-gray-100">
               添加记账记录
             </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">交易类型 <span className="text-red-500">*</span></label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setTransType("expense")}
-                    className={`px-4 py-2 rounded-md text-sm font-medium ${
-                      transType === "expense" 
-                        ? "bg-red-100 text-red-700 border-red-200" 
-                        : "bg-white text-gray-700 border-gray-200"
-                    } border`}
-                  >
-                    支出
-                  </button>
-                  <button
-                    onClick={() => setTransType("income")}
-                    className={`px-4 py-2 rounded-md text-sm font-medium ${
-                      transType === "income" 
-                        ? "bg-green-100 text-green-700 border-green-200" 
-                        : "bg-white text-gray-700 border-gray-200"
-                    } border`}
-                  >
-                    收入
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">金额（元） <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={transAmount}
-                  onChange={(e) => setTransAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">分类 <span className="text-red-500">*</span></label>
-                <select
-                  value={transCategory}
-                  onChange={(e) => setTransCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300 bg-white"
-                >
-                  {transCategories[transType].map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">日期 <span className="text-red-500">*</span></label>
-                <input
-                  type="date"
-                  value={transDate}
-                  onChange={(e) => setTransDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-600 mb-1">备注（可选）</label>
-                <textarea
-                  value={transNote}
-                  onChange={(e) => setTransNote(e.target.value)}
-                  placeholder="输入备注信息..."
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300 resize-none"
-                ></textarea>
-              </div>
-            </div>
-
-            <button
-              onClick={addTransaction}
-              className="w-full mt-6 px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
-            >
-              添加记账记录
-            </button>
+            <TransactionForm onAdd={handleAddTransaction} />
           </div>
 
           {/* 记账记录列表 */}
@@ -1534,200 +766,12 @@ export default function App() {
             </div>
             
             <div className="p-4">
-              {currentEditItem && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-600 mb-1">物品名称 <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      value={currentEditItem.name || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-600 mb-1">价格（元） <span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={currentEditItem.price || ""}
-                        onChange={(e) => {
-                          setCurrentEditItem(prev => ({ ...prev, price: Number(e.target.value) }));
-                          setEditCalculatorValue(e.target.value);
-                        }}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 pr-20"
-                      />
-                      <button
-                        onClick={() => setShowEditCalculator(!showEditCalculator)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-sm"
-                      >
-                        {showEditCalculator ? "收起计算器" : "使用计算器"}
-                      </button>
-                    </div>
-                    
-                    {/* 编辑物品的计算器面板 */}
-                    {showEditCalculator && (
-                      <div className="mt-2 bg-gray-100 rounded-md p-3">
-                        <div className="mb-2 bg-white p-2 rounded text-right font-mono overflow-x-auto">
-                          {editCalculatorValue || "0"}
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
-                          {["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+", "(", ")", "C"].map(key => (
-                            <button
-                              key={key}
-                              onClick={() => handleEditCalculatorKeyPress(key)}
-                              className={`py-2 px-1 rounded ${
-                                key === "C" ? "bg-red-100 text-red-700" :
-                                key === "=" ? "bg-green-100 text-green-700" :
-                                ["+", "-", "*", "/", "(", ")"].includes(key) ? "bg-yellow-100 text-yellow-700" :
-                                "bg-white text-gray-800"
-                              }`}
-                            >
-                              {key}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">购买日期 <span className="text-red-500">*</span></label>
-                    <input
-                      type="date"
-                      value={currentEditItem.purchaseDate || ""}
-                                          onChange={(e) => setCurrentEditItem(prev => ({ ...prev, purchaseDate: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">到期日期（可选）</label>
-                    <input
-                      type="date"
-                      value={currentEditItem.expireDate || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, expireDate: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
-                    <select
-                      value={currentEditItem.type || "long"}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-                    >
-                      <option value="long">长期物品（如电器、家具）</option>
-                      <option value="consume">消耗品（如服饰、食品、日用品）</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
-                    <select
-                      value={currentEditItem.category || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-                    >
-                      {allCategories.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                      <option value="自定义">自定义分类</option>
-                    </select>
-                    
-                    {currentEditItem.category === "自定义" && (
-                      <input
-                        type="text"
-                        placeholder="输入自定义分类名称"
-                        value={currentEditItem.customCategory || ""}
-                        onChange={(e) => setCurrentEditItem(prev => ({ ...prev, customCategory: e.target.value }))}
-                        className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                      />
-                    )}
-                  </div>
-
-                  {currentEditItem.type === "consume" && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">总数量（可选）</label>
-                        <input
-                          type="number"
-                          value={currentEditItem.quantity || ""}
-                          onChange={(e) => setCurrentEditItem(prev => ({ ...prev, quantity: Number(e.target.value) }))}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">已使用次数</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={currentEditItem.usedCount || 0}
-                          onChange={(e) => setCurrentEditItem(prev => ({ ...prev, usedCount: Number(e.target.value) }))}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-gray-600">附加成本（如运费、安装费）</label>
-                  <button
-                    onClick={addEditAdditionalCost}
-                    className="px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors"
-                  >
-                    添加
-                  </button>
-                </div>
-
-                {currentEditItem?.additionalCosts && currentEditItem.additionalCosts.length > 0 && (
-                  <div className="bg-gray-50 rounded-md p-3 mt-2">
-                    {currentEditItem.additionalCosts.map((cost, index) => (
-                      <div key={index} className="flex justify-between items-center mb-2 last:mb-0">
-                        <span className="text-sm text-gray-700">{cost.desc}：{cost.amt.toFixed(2)}元</span>
-                        <button
-                          onClick={() => removeEditAdditionalCost(index)}
-                          className="text-red-500 text-sm hover:text-red-700"
-                        >
-                          删除
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选）</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleEditImageUpload}
-                  className="w-full"
-                />
-
-                {currentEditItem?.image && (
-                  <div className="mt-3 flex items-center gap-3">
-                    <img
-                      src={currentEditItem.image}
-                      alt="物品凭证"
-                      className="w-20 h-20 object-cover rounded-md border border-gray-200"
-                    />
-                    <button
-                      onClick={removeEditImage}
-                      className="text-sm text-red-500 hover:text-red-700"
-                    >
-                      删除图片
-                    </button>
-                  </div>
-                )}
-              </div>
+              <ItemForm 
+                item={currentEditItem}
+                categories={categories} 
+                onSubmit={handleEditItem}
+                recentCategory={recentCategory}
+              />
             </div>
 
             <div className="p-4 border-t flex gap-3 justify-end">
@@ -1736,12 +780,6 @@ export default function App() {
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
               >
                 取消
-              </button>
-              <button
-                onClick={saveEdit}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                保存修改
               </button>
             </div>
           </div>
