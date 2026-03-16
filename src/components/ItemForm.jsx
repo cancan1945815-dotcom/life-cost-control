@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // 新增 useEffect 导入
 import Calculator from "./Calculator";
 
 /**
@@ -29,6 +29,23 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
   // 计算器相关状态
   const [calculatorValue, setCalculatorValue] = useState(formState.price);
   const [showCalculator, setShowCalculator] = useState(false);
+
+  // ========== 新增：复制物品后自动聚焦优化 ==========
+  useEffect(() => {
+    // 检测是否是复制的物品（名称含「副本」且不是编辑模式）
+    if (item.name?.includes("（副本）") && !item.id) {
+      const nameInput = document.querySelector('input[placeholder="如：纯棉T恤、无线鼠标"]');
+      if (nameInput) {
+        // 聚焦输入框
+        nameInput.focus();
+        // 选中「（副本）」后缀，方便用户快速修改
+        const suffixIndex = nameInput.value.indexOf('（副本）');
+        if (suffixIndex > -1) {
+          nameInput.setSelectionRange(suffixIndex, nameInput.value.length);
+        }
+      }
+    }
+  }, [item]);
 
   // 更新表单值
   const handleChange = (field, value) => {

@@ -253,6 +253,35 @@ export default function App() {
     addCustomCategory(finalCategory);
   };
 
+  // 新增：复制物品函数
+  const handleCopyItem = (originalItem) => {
+    // 复制物品数据，生成新ID，添加副本后缀
+    const copiedItem = {
+      ...originalItem,
+      id: Date.now(), // 生成唯一新ID
+      name: `${originalItem.name}（副本）`, // 自动添加副本后缀
+      isFinished: false, // 复制的物品默认未耗尽
+      usedCount: '0', // 重置使用次数
+      inTrash: false, // 确保不在回收站
+      image: null // 清空图片（可根据需求改为保留：image: originalItem.image）
+    };
+
+    // 记忆分类
+    setRecentCategory(originalItem.category);
+    
+    // 添加新物品到列表
+    setItems([...items, copiedItem]);
+    
+    // 自动滚动到添加表单区域
+    const formTitle = document.querySelector('h2:text("添加新物品")');
+    if (formTitle) {
+      formTitle.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    // 提示用户复制成功
+    alert(`已复制物品「${originalItem.name}」，新物品已添加到列表！`);
+  };
+
   const handleUseOnce = (itemId) => {
     setItems(items.map(item => {
       if (item.id === itemId) {
@@ -555,6 +584,7 @@ export default function App() {
                           onDelete={handleDeleteItem}
                           onUseOnce={handleUseOnce}
                           onMarkFinished={handleMarkFinished}
+                          onCopy={handleCopyItem} // 传递复制回调
                           initiallyCollapsed={true}
                         />
                       ))}

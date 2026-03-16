@@ -9,6 +9,7 @@ import { getTotalCost, getDayCost, getUseCost, getRemainingQuantity } from "../u
  * @param {Function} props.onDelete - 删除回调
  * @param {Function} props.onUseOnce - 使用一次回调
  * @param {Function} props.onMarkFinished - 标记耗尽回调
+ * @param {Function} props.onCopy - 复制物品回调（新增）
  * @param {boolean} props.initiallyCollapsed - 是否默认折叠
  * @returns {JSX.Element} 物品卡片组件
  */
@@ -18,13 +19,14 @@ const ItemCard = ({
   onDelete, 
   onUseOnce, 
   onMarkFinished,
+  onCopy, // 新增：接收复制回调
   initiallyCollapsed = true
 }) => {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-      {/* 折叠头部 */}
+      {/* 折叠头部（原有逻辑不变） */}
       <div
         onClick={() => setCollapsed(!collapsed)}
         className="px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-gray-50"
@@ -83,7 +85,7 @@ const ItemCard = ({
             )}
           </div>
 
-          {/* 附加成本 */}
+          {/* 附加成本（原有逻辑不变） */}
           {item.additionalCosts && item.additionalCosts.length > 0 && (
             <div className="mb-4 text-sm">
               <details>
@@ -97,7 +99,7 @@ const ItemCard = ({
             </div>
           )}
 
-          {/* 物品图片 */}
+          {/* 物品图片（原有逻辑不变） */}
           {item.image && (
             <div className="mb-4">
               <img
@@ -108,7 +110,7 @@ const ItemCard = ({
             </div>
           )}
 
-          {/* 操作按钮 */}
+          {/* 操作按钮（新增复制按钮） */}
           <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
             {item.type === "consume" && !item.isFinished && (
               <>
@@ -126,6 +128,14 @@ const ItemCard = ({
                 </button>
               </>
             )}
+
+            {/* 新增：复制按钮（放在编辑按钮左侧） */}
+            <button
+              onClick={() => onCopy(item)}
+              className="px-3 py-1.5 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 transition-colors"
+            >
+              复制物品
+            </button>
 
             <div className="ml-auto flex gap-2">
               <button
