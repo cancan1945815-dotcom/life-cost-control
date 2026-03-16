@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 // ========== 版本配置 ==========
-const CURRENT_VERSION = "3.0.0";
+const CURRENT_VERSION = "4.0.0";
 const VERSION_STORAGE_KEY = "MY_APP_VERSION";
+const REMOTE_VERSION_URL = "https://raw.githubusercontent.com/your-username/your-repo/main/version.json"; // 替换为你的版本文件地址
 
 export default function App() {
   // ========== 核心状态 ==========
@@ -39,6 +40,26 @@ export default function App() {
     }
   });
 
+  // 分类数据（持久化存储）
+  const [categories, setCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem("MY_APP_CATEGORIES");
+      return saved ? JSON.parse(saved) : ["服饰", "电子产品", "食品", "日用品", "其他"];
+    } catch (e) {
+      console.log("读取分类数据失败，使用默认分类", e);
+      return ["服饰", "电子产品", "食品", "日用品", "其他"];
+    }
+  });
+
+  // 最近使用的分类
+  const [recentCategory, setRecentCategory] = useState(() => {
+    try {
+      return localStorage.getItem("MY_APP_RECENT_CATEGORY") || "服饰";
+    } catch (e) {
+      return "服饰";
+    }
+  });
+
   // ========== 表单状态 ==========
   // 物品添加表单
   const [name, setName] = useState("");
@@ -46,7 +67,7 @@ export default function App() {
   const [purchaseDate, setPurchaseDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
   const [type, setType] = useState("long");
-  const [category, setCategory] = useState("服饰");
+  const [category, setCategory] = useState("");
   const [customCategory, setCustomCategory] = useState("");
   const [quantity, setQuantity] = useState("");
   const [usedCount, setUsedCount] = useState("");
@@ -66,13 +87,19 @@ export default function App() {
 
   // ========== 辅助状态 ==========
   const [activeTab, setActiveTab] = useState("items"); // items | outfit | finance
-  const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("全部");
-  const [collapsed, setCollapsed] = useState({}); // 默认全部折叠
+  const [collapsed, setCollapsed] = useState({}); // 分类折叠状态
+  const [itemCollapsed, setItemCollapsed] = useState({}); // 物品卡片折叠状态
   const [selectedOutfitItems, setSelectedOutfitItems] = useState([]);
   const [showUpdateAlert, setShowUpdateAlert] = useState(false);
-  const [oldVersion, setOldVersion] = useState("");
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [newVersion, setNewVersion] = useState("");
+  const [importFile, setImportFile] = useState(null);
+  const [importStatus, setImportStatus] = useState("");
+  
+  // 文件导入ref
+  const fileInputRef = useRef(null);
 
   // ========== 本地存储 ==========
   useEffect(() => {
@@ -87,26 +114,165 @@ export default function App() {
     localStorage.setItem("MY_TRANSACTIONS", JSON.stringify(transactions));
   }, [transactions]);
 
-  // ========== 版本检查 ==========
   useEffect(() => {
-    const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY) || "1.0.0";
-    if (savedVersion !== CURRENT_VERSION) {
-      setOldVersion(savedVersion);
-      setShowUpdateAlert(true);
-      localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
-    }
+    localStorage.setItem("MY_APP_CATEGORIES", JSON.stringify(categories));
+  }, [categories]);
 
-    // 初始化所有分类为折叠状态
-    const allCats = ["服饰", "电子产品", "食品", "日用品", "其他", ...Array.from(new Set(items.map(i => i.category)))];
+  useEffect(() => {
+    localStorage.setItem("MY_APP_RECENT_CATEGORY", recentCategory);
+  }, [recentCategory]);
+
+  // ========== 初始化 ==========
+  useEffect(() => {
+    // 初始化分类折叠状态（全部折叠）
     const initialCollapsed = {};
-    allCats.forEach(cat => {
-      initialCollapsed[cat] = true; // 默认折叠
+    categories.forEach(cat => {
+      initialCollapsed[cat] = true;
     });
     setCollapsed(initialCollapsed);
+
+    // 初始化物品卡片折叠状态（全部折叠）
+    const initialItemCollapsed = {};
+    items.forEach(item => {
+      initialItemCollapsed[item.id] = true;
+    });
+    setItemCollapsed(initialItemCollapsed);
+
+    // 设置最近使用的分类
+    setCategory(recentCategory);
+
+    // 检查版本更新
+    checkVersionUpdate();
+
+    // 检查本地版本
+    const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY) || "1.0.0";
+    if (savedVersion !== CURRENT_VERSION) {
+      localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
+    }
   }, []);
 
+  // ========== 版本更新检查 ==========
+  const checkVersionUpdate = async () => {
+    try {
+      // 如果你没有远程版本文件，可以注释掉这段，改用本地版本对比
+      // const response = await fetch(REMOTE_VERSION_URL);
+      // const versionData = await response.json();
+      // const latestVersion = versionData.latestVersion;
+      
+      // 本地版本模拟（实际使用时替换为上面的远程请求）
+      const latestVersion = "4.0.0";
+      
+      if (latestVersion !== CURRENT_VERSION) {
+        setUpdateAvailable(true);
+        setNewVersion(latestVersion);
+      }
+    } catch (e) {
+      console.log("检查版本更新失败", e);
+    }
+  };
+
+  const performUpdate = () => {
+    // 实际更新逻辑：刷新页面 + 清除旧数据缓存
+    localStorage.removeItem(VERSION_STORAGE_KEY);
+    window.location.reload();
+    setShowUpdateAlert(true);
+    setUpdateAvailable(false);
+  };
+
+  // ========== 数据导入导出 ==========
+  const exportData = () => {
+    const data = {
+      items,
+      outfitHistory,
+      transactions,
+      categories,
+      exportTime: new Date().toISOString(),
+      version: CURRENT_VERSION
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `物品穿搭记账数据_${new Date().toLocaleDateString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImportFile(file);
+      readImportFile(file);
+    }
+  };
+
+  const readImportFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target.result);
+        
+        // 验证数据格式
+        if (!importedData || typeof importedData !== "object") {
+          setImportStatus("错误：无效的文件格式");
+          return;
+        }
+
+        // 合并数据（保留现有数据，新增数据追加）
+        const mergedItems = [...items];
+        const mergedOutfits = [...outfitHistory];
+        const mergedTransactions = [...transactions];
+        const mergedCategories = [...new Set([...categories, ...(importedData.categories || [])])];
+
+        // 添加新物品（避免重复）
+        if (Array.isArray(importedData.items)) {
+          importedData.items.forEach(item => {
+            if (item.id && !mergedItems.some(i => i.id === item.id)) {
+              mergedItems.push(item);
+            }
+          });
+        }
+
+        // 添加新穿搭记录
+        if (Array.isArray(importedData.outfitHistory)) {
+          importedData.outfitHistory.forEach(outfit => {
+            if (outfit.date && !mergedOutfits.some(o => o.date === outfit.date)) {
+              mergedOutfits.push(outfit);
+            }
+          });
+        }
+
+        // 添加新记账记录
+        if (Array.isArray(importedData.transactions)) {
+          importedData.transactions.forEach(trans => {
+            if (trans.id && !mergedTransactions.some(t => t.id === trans.id)) {
+              mergedTransactions.push(trans);
+            }
+          });
+        }
+
+        // 更新状态
+        setItems(mergedItems);
+        setOutfitHistory(mergedOutfits);
+        setTransactions(mergedTransactions);
+        setCategories(mergedCategories);
+
+        setImportStatus(`成功：导入 ${importedData.items?.length || 0} 个物品，${importedData.outfitHistory?.length || 0} 条穿搭记录，${importedData.transactions?.length || 0} 条记账记录`);
+        
+        // 重置文件输入
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      } catch (error) {
+        setImportStatus(`错误：${error.message}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // ========== 工具函数 ==========
-  const allCategories = ["服饰", "电子产品", "食品", "日用品", "其他", ...Array.from(new Set(items.map(i => i.category)))];
+  const allCategories = [...categories];
   
   // 记账分类
   const transCategories = {
@@ -114,8 +280,39 @@ export default function App() {
     income: ["工资", "兼职", "理财", "红包", "其他收入"]
   };
 
+  // 切换分类折叠
   const toggleCollapse = (cat) => {
     setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
+  // 切换物品卡片折叠
+  const toggleItemCollapse = (itemId) => {
+    setItemCollapsed(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  // 删除分类
+  const deleteCategory = (catToDelete) => {
+    if (window.confirm(`确定删除分类"${catToDelete}"吗？该分类下的物品不会被删除。`)) {
+      const newCategories = categories.filter(cat => cat !== catToDelete);
+      setCategories(newCategories);
+      
+      // 如果删除的是当前选中的分类，切换到最近使用的分类
+      if (category === catToDelete) {
+        setCategory(recentCategory);
+      }
+      
+      // 如果删除的是筛选分类，重置筛选
+      if (filterCategory === catToDelete) {
+        setFilterCategory("全部");
+      }
+    }
+  };
+
+  // 添加自定义分类
+  const addCustomCategory = (newCat) => {
+    if (newCat && !categories.includes(newCat)) {
+      setCategories([...categories, newCat]);
+    }
   };
 
   const getTotalCost = (item) => {
@@ -139,6 +336,13 @@ export default function App() {
     return (total / count).toFixed(2);
   };
 
+  // 计算剩余数量
+  const getRemainingQuantity = (item) => {
+    if (item.type !== "consume" || !item.quantity) return "-";
+    const remaining = Math.max(0, item.quantity - (item.usedCount || 0));
+    return `${remaining}/${item.quantity}`;
+  };
+
   // 记账统计
   const getFinanceStats = () => {
     const totalExpense = transactions
@@ -156,24 +360,6 @@ export default function App() {
     return { totalExpense, totalIncome, balance };
   };
 
-  // 导出数据
-  const exportData = () => {
-    const data = {
-      items,
-      outfitHistory,
-      transactions,
-      exportTime: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `物品穿搭记账数据_${new Date().toLocaleDateString()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   // ========== 物品操作功能 ==========
   // 重置添加表单
   const resetAddForm = () => {
@@ -182,13 +368,12 @@ export default function App() {
     setPurchaseDate("");
     setExpireDate("");
     setType("long");
-    setCategory("服饰");
+    setCategory(recentCategory); // 恢复为最近使用的分类
     setCustomCategory("");
     setQuantity("");
     setUsedCount("");
     setAdditionalCosts([]);
     setImage(null);
-    setEditingId(null);
   };
 
   // 添加物品
@@ -198,11 +383,19 @@ export default function App() {
       return;
     }
 
-    const finalCategory = category === "自定义" ? customCategory.trim() : category;
-    if (category === "自定义" && !finalCategory) {
-      alert("请输入自定义分类名称");
-      return;
+    let finalCategory = category;
+    if (category === "自定义") {
+      finalCategory = customCategory.trim();
+      if (!finalCategory) {
+        alert("请输入自定义分类名称");
+        return;
+      }
+      // 添加新分类到分类列表
+      addCustomCategory(finalCategory);
     }
+
+    // 记忆本次选择的分类
+    setRecentCategory(finalCategory);
 
     const itemData = {
       id: Date.now(),
@@ -238,6 +431,11 @@ export default function App() {
     if (!currentEditItem?.name || !currentEditItem?.price || !currentEditItem?.purchaseDate) {
       alert("请填写名称、价格和购买日期（必填项）");
       return;
+    }
+
+    // 如果修改了分类，添加到分类列表
+    if (currentEditItem.category && !categories.includes(currentEditItem.category)) {
+      addCustomCategory(currentEditItem.category);
     }
 
     setItems(items.map(item => 
@@ -442,37 +640,71 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 max-w-5xl mx-auto">
       {/* 版本更新提醒 */}
-      {showUpdateAlert && (
+      {(showUpdateAlert || updateAvailable) && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white p-4 rounded-lg shadow-lg z-50 max-w-md w-full">
           <div className="flex justify-between items-start">
             <div>
-              <h3 className="font-bold text-lg">🎉 版本更新</h3>
-              <p className="mt-1 text-sm">已从 v{oldVersion} 更新到 v{CURRENT_VERSION}</p>
-              <p className="mt-2 text-xs opacity-90">
-                ✅ 独立编辑弹窗 ✅ 默认折叠分类 ✅ 新增记账功能<br/>
-                ✅ 数据统计 ✅ 导出功能 ✅ 细节优化
-              </p>
+              <h3 className="font-bold text-lg">🎉 {updateAvailable ? "新版本可用" : "版本更新完成"}</h3>
+              {updateAvailable ? (
+                <>
+                  <p className="mt-1 text-sm">当前版本：v{CURRENT_VERSION} | 最新版本：v{newVersion}</p>
+                  <p className="mt-2 text-xs opacity-90">
+                    ✅ 物品卡片折叠展示 ✅ 分类记忆/删除 ✅ 数据导入功能<br/>
+                    ✅ 版本自动更新 ✅ 移除OCR识图 ✅ 性能优化
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1 text-sm">已更新到最新版本 v{CURRENT_VERSION}</p>
+              )}
             </div>
-            <button 
-              onClick={() => setShowUpdateAlert(false)}
-              className="text-white hover:text-gray-200 ml-2"
-            >
-              ×
-            </button>
+            <div className="flex gap-2">
+              {updateAvailable && (
+                <button 
+                  onClick={performUpdate}
+                  className="px-2 py-1 bg-white text-green-700 rounded text-xs font-medium hover:bg-gray-100"
+                >
+                  立即更新
+                </button>
+              )}
+              <button 
+                onClick={() => {
+                  setShowUpdateAlert(false);
+                  setUpdateAvailable(false);
+                }}
+                className="text-white hover:text-gray-200"
+              >
+                ×
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* 头部 */}
       <header className="mb-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">米米去处 · 全能管理</h1>
-          <button 
-            onClick={exportData}
-            className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            导出数据
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={exportData}
+              className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              导出数据
+            </button>
+            <label className="px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 cursor-pointer">
+              导入数据
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleFileSelect}
+                ref={fileInputRef}
+                className="hidden"
+              />
+            </label>
+            {importStatus && (
+              <p className="text-xs text-gray-700 bg-gray-100 px-2 py-1 rounded">{importStatus}</p>
+            )}
+          </div>
         </div>
         
         {/* 标签页切换 */}
@@ -509,7 +741,15 @@ export default function App() {
           </button>
         </div>
         
-        <p className="mt-2 text-xs text-gray-500">v{CURRENT_VERSION} | 数据仅保存在本地，安全无忧</p>
+        <div className="flex justify-between items-center mt-2">
+          <p className="text-xs text-gray-500">v{CURRENT_VERSION} | 数据仅保存在本地，安全无忧</p>
+          <button 
+            onClick={checkVersionUpdate}
+            className="text-xs text-blue-500 hover:text-blue-700"
+          >
+            检查更新
+          </button>
+        </div>
       </header>
 
       {/* ========== 物品管理标签页 ========== */}
@@ -599,29 +839,63 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
-                <select
-                  value={category}
-                  onChange={(e) => {
-                    setCategory(e.target.value);
-                    if (e.target.value !== "自定义") setCustomCategory("");
-                  }}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-                >
-                  {allCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                  <option value="自定义">自定义分类</option>
-                </select>
-                {category === "自定义" && (
-                  <input
-                    type="text"
-                    placeholder="输入自定义分类名称"
-                    value={customCategory}
-                    onChange={(e) => setCustomCategory(e.target.value)}
-                    className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  />
-                )}
+                <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span>
+                  <button 
+                    onClick={() => setCategory("自定义")}
+                    className="ml-2 text-xs text-blue-500 hover:text-blue-700"
+                  >
+                    管理分类
+                  </button>
+                </label>
+                
+                {/* 分类选择与管理 */}
+                <div className="mb-2">
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {allCategories.map(cat => (
+                      <div key={cat} className="flex items-center bg-gray-100 rounded px-2 py-1">
+                        <button
+                          onClick={() => setCategory(cat)}
+                          className={`text-xs ${category === cat ? "font-bold text-blue-600" : "text-gray-700"}`}
+                        >
+                          {cat}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteCategory(cat);
+                          }}
+                          className="ml-1 text-xs text-red-500 hover:text-red-700"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <select
+                    value={category}
+                    onChange={(e) => {
+                      setCategory(e.target.value);
+                      if (e.target.value !== "自定义") setCustomCategory("");
+                    }}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                  >
+                    {allCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    <option value="自定义">自定义分类</option>
+                  </select>
+                  
+                  {category === "自定义" && (
+                    <input
+                      type="text"
+                      placeholder="输入自定义分类名称"
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  )}
+                </div>
               </div>
 
               {type === "consume" && (
@@ -735,34 +1009,45 @@ export default function App() {
                   </div>
 
                   {!collapsed[category] && (
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-3 space-y-2">
                       {groupedItems[category].map(item => (
                         <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-                          <div className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4">
-                            {item.image && (
-                              <div className="sm:w-24 sm:h-24 flex-shrink-0">
-                                <img
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover rounded-md border border-gray-200"
-                                />
-                              </div>
-                            )}
+                          {/* 物品卡片折叠头部（精简展示） */}
+                          <div
+                            onClick={() => toggleItemCollapse(item.id)}
+                            className="px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+                          >
+                            <div className="flex items-center">
+                              <h3 className="font-medium text-gray-800">{item.name}</h3>
+                              {item.type === "consume" && (
+                                <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+                                  item.isFinished
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-green-100 text-green-800"
+                                }`}>
+                                  {item.isFinished ? "已耗尽" : "使用中"}
+                                </span>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center gap-4 text-sm">
+                              {item.type === "consume" && item.quantity && (
+                                <span className="text-gray-600">
+                                  剩余：{getRemainingQuantity(item)}
+                                </span>
+                              )}
+                              <span className="text-gray-700 font-medium">
+                                {item.type === "long" ? "日成本" : "次成本"}：¥{item.type === "long" ? getDayCost(item) : getUseCost(item)}
+                              </span>
+                              <span className="text-gray-500">
+                                {itemCollapsed[item.id] ? "▼ 展开" : "▲ 收起"}
+                              </span>
+                            </div>
+                          </div>
 
-                            <div className="flex-1">
-                              <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-bold text-lg text-gray-800">{item.name}</h3>
-                                {item.type === "consume" && (
-                                  <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                                    item.isFinished
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-green-100 text-green-800"
-                                  }`}>
-                                    {item.isFinished ? "已耗尽" : "使用中"}
-                                  </span>
-                                )}
-                              </div>
-
+                          {/* 物品卡片展开内容（详细信息） */}
+                          {!itemCollapsed[item.id] && (
+                            <div className="px-4 py-3 border-t border-gray-100">
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-sm">
                                 <p className="text-gray-600">
                                   <span className="font-medium text-gray-700">总价：</span>
@@ -778,27 +1063,11 @@ export default function App() {
                                     {item.expireDate}
                                   </p>
                                 )}
-                                {item.type === "consume" && item.quantity && (
+                                {item.type === "consume" && (
                                   <p className="text-gray-600">
-                                    <span className="font-medium text-gray-700">总数量：</span>
-                                    {item.quantity}
+                                    <span className="font-medium text-gray-700">已使用：</span>
+                                    {item.usedCount || 0} 次
                                   </p>
-                                )}
-                              </div>
-
-                              <div className="mb-4">
-                                {item.type === "long" ? (
-                                  <div className="bg-blue-50 rounded-md p-3">
-                                    <p className="font-medium text-blue-800">长期物品 · 每日成本</p>
-                                    <p className="text-2xl font-bold text-blue-600 mt-1">¥{getDayCost(item)}</p>
-                                    <p className="text-xs text-gray-500 mt-1">随使用天数增加，成本逐渐降低</p>
-                                  </div>
-                                ) : (
-                                  <div className="bg-green-50 rounded-md p-3">
-                                    <p className="font-medium text-green-800">消耗品 · 单次成本</p>
-                                    <p className="text-2xl font-bold text-green-600 mt-1">¥{getUseCost(item)}</p>
-                                    <p className="text-xs text-gray-500 mt-1">已使用 {item.usedCount || 0} 次</p>
-                                  </div>
                                 )}
                               </div>
 
@@ -814,46 +1083,56 @@ export default function App() {
                                   </details>
                                 </div>
                               )}
-                            </div>
-                          </div>
 
-                          <div className="bg-gray-50 px-4 py-3 flex flex-wrap gap-2 border-t border-gray-100">
-                            {item.type === "consume" && !item.isFinished && (
-                              <>
-                                <button
-                                  onClick={() => handleUseOnce(item.id)}
-                                  className="px-3 py-1.5 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 transition-colors"
-                                >
-                                  使用一次（+1）
-                                </button>
-                                <button
-                                  onClick={() => handleMarkFinished(item.id)}
-                                  className="px-3 py-1.5 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 transition-colors"
-                                >
-                                  标记为耗尽
-                                </button>
-                              </>
-                            )}
+                              {item.image && (
+                                <div className="mb-4">
+                                  <img
+                                    src={item.image}
+                                    alt={item.name}
+                                    className="w-24 h-24 object-cover rounded-md border border-gray-200"
+                                  />
+                                </div>
+                              )}
 
-                            <div className="ml-auto flex gap-2">
-                              <button
-                                onClick={() => openEditModal(item)}
-                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 transition-colors"
-                              >
-                                编辑
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (window.confirm("确定删除该物品吗？删除后无法恢复！")) {
-                                    setItems(items.filter(i => i.id !== item.id));
-                                  }
-                                }}
-                                className="px-3 py-1.5 bg-gray-200 text-red-600 rounded-md text-sm hover:bg-gray-300 transition-colors"
-                              >
-                                删除
-                              </button>
+                              <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
+                                {item.type === "consume" && !item.isFinished && (
+                                  <>
+                                    <button
+                                      onClick={() => handleUseOnce(item.id)}
+                                      className="px-3 py-1.5 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 transition-colors"
+                                    >
+                                      使用一次（+1）
+                                    </button>
+                                    <button
+                                      onClick={() => handleMarkFinished(item.id)}
+                                      className="px-3 py-1.5 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 transition-colors"
+                                    >
+                                      标记为耗尽
+                                    </button>
+                                  </>
+                                )}
+
+                                <div className="ml-auto flex gap-2">
+                                  <button
+                                    onClick={() => openEditModal(item)}
+                                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 transition-colors"
+                                  >
+                                    编辑
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm("确定删除该物品吗？删除后无法恢复！")) {
+                                        setItems(items.filter(i => i.id !== item.id));
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-gray-200 text-red-600 rounded-md text-sm hover:bg-gray-300 transition-colors"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>
