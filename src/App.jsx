@@ -209,19 +209,34 @@ export default function App() {
       localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
     }
   }, [categories, items]);
+// ✅ 修改后的初始化逻辑
+useEffect(() => {
+  // 初始化分类折叠状态（全部折叠）
+  const initialCollapsed = {};
+  categories.forEach(cat => {
+    initialCollapsed[cat] = true;
+  });
+  setCollapsed(initialCollapsed);
 
-  // 监听物品变化，确保新添加的物品默认折叠
-  useEffect(() => {
-    setItemCollapsed(prev => {
-      const newState = { ...prev };
-      items.forEach(item => {
-        if (!(item.id in newState)) {
-          newState[item.id] = true; // 新物品默认折叠
-        }
-      });
-      return newState;
-    });
-  }, [items.length]);
+  // 初始化物品卡片折叠状态（仅首次加载的物品折叠）
+  const initialItemCollapsed = {};
+  items.forEach(item => {
+    initialItemCollapsed[item.id] = true; // 仅首次加载的物品折叠
+  });
+  setItemCollapsed(initialItemCollapsed);
+
+  // 设置最近使用的分类
+  setCategory(recentCategory);
+
+  // 检查版本更新
+  checkVersionUpdate();
+
+  // 检查本地版本
+  const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY) || "1.0.0";
+  if (savedVersion !== CURRENT_VERSION) {
+    localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
+  }
+}, [categories, items, recentCategory]); // 仅依赖首次加载的变量
 
   // ========== 版本更新检查 ==========
   const checkVersionUpdate = async () => {
@@ -451,49 +466,54 @@ export default function App() {
   };
 
   // 添加物品
-  const addItem = () => {
-    if (!name || !price || !purchaseDate) {
-      alert("请填写名称、价格和购买日期（必填项）");
+const addItem = () => {
+  if (!name || !price || !purchaseDate) {
+    alert("请填写名称、价格和购买日期（必填项）");
+    return;
+  }
+
+  let finalCategory = category;
+  if (category === "自定义") {
+    finalCategory = customCategory.trim();
+    if (!finalCategory) {
+      alert("请输入自定义分类名称");
       return;
     }
+    // 添加新分类到分类列表
+    addCustomCategory(finalCategory);
+  }
 
-    let finalCategory = category;
-    if (category === "自定义") {
-      finalCategory = customCategory.trim();
-      if (!finalCategory) {
-        alert("请输入自定义分类名称");
-        return;
-      }
-      // 添加新分类到分类列表
-      addCustomCategory(finalCategory);
-    }
+  // 记忆本次选择的分类
+  setRecentCategory(finalCategory);
 
-    // 记忆本次选择的分类
-    setRecentCategory(finalCategory);
-
-    const itemData = {
-      id: Date.now(),
-      name,
-      price: Number(price),
-      purchaseDate,
-      expireDate: expireDate || "",
-      type,
-      category: finalCategory,
-      quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
-      usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
-      additionalCosts: [...additionalCosts],
-      isFinished: false,
-      inTrash: false,
-      image: image || null
-    };
-
-    setItems([...items, itemData]);
-    resetAddForm();
-    
-    // 更新折叠状态 - 新分类默认折叠
-    setCollapsed(prev => ({ ...prev, [finalCategory]: true }));
+  const itemData = {
+    id: Date.now(),
+    name,
+    price: Number(price),
+    purchaseDate,
+    expireDate: expireDate || "",
+    type,
+    category: finalCategory,
+    quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
+    usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
+    additionalCosts: [...additionalCosts],
+    isFinished: false,
+    inTrash: false,
+    image: image || null
   };
 
+  setItems([...items, itemData]);
+  resetAddForm();
+  
+  // ✅ 新增：新物品默认展开（false = 展开）
+  setItemCollapsed(prev => ({
+    ...prev,
+    [itemData.id]: false // 关键：新添加的物品不折叠
+  }));
+  
+  // 更新折叠状态 - 新分类默认折叠
+  setCollapsed(prev => ({ ...prev, [finalCategory]: true }));
+};
   // 打开编辑弹窗
   const openEditModal = (item) => {
     setCurrentEditItem({ ...item });
