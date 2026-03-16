@@ -183,60 +183,38 @@ export default function App() {
 
   // ========== 初始化 ==========
   useEffect(() => {
-    // 初始化分类折叠状态（全部折叠）
+    // 1. 手动读取本地存储的初始物品（不依赖items变量，避免重复执行）
+    const savedItems = JSON.parse(localStorage.getItem("MY_LIFE_COST_ITEMS") || "[]");
+    // 手动读取本地存储的分类（避免依赖categories变量）
+    const savedCategories = JSON.parse(localStorage.getItem("MY_APP_CATEGORIES") || '["服饰", "电子产品", "食品", "日用品", "其他"]');
+    
+    // 2. 初始化分类折叠状态（全部折叠）
     const initialCollapsed = {};
-    categories.forEach(cat => {
+    savedCategories.forEach(cat => {
       initialCollapsed[cat] = true;
     });
     setCollapsed(initialCollapsed);
 
-    // 初始化物品卡片折叠状态（全部折叠）
+    // 3. 初始化物品卡片折叠状态（仅首次打开APP时的物品折叠）
     const initialItemCollapsed = {};
-    items.forEach(item => {
-      initialItemCollapsed[item.id] = true;
+    savedItems.forEach(item => {
+      initialItemCollapsed[item.id] = true; // 仅首次加载的物品折叠
     });
     setItemCollapsed(initialItemCollapsed);
 
-    // 设置最近使用的分类
-    setCategory(recentCategory);
+    // 4. 设置最近使用的分类
+    const savedRecentCategory = localStorage.getItem("MY_APP_RECENT_CATEGORY") || "服饰";
+    setCategory(savedRecentCategory);
 
-    // 检查版本更新
+    // 5. 检查版本更新
     checkVersionUpdate();
 
-    // 检查本地版本
+    // 6. 检查本地版本
     const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY) || "1.0.0";
     if (savedVersion !== CURRENT_VERSION) {
       localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
     }
-  }, [categories, items]);
-// ✅ 修改后的初始化逻辑
-useEffect(() => {
-  // 初始化分类折叠状态（全部折叠）
-  const initialCollapsed = {};
-  categories.forEach(cat => {
-    initialCollapsed[cat] = true;
-  });
-  setCollapsed(initialCollapsed);
-
-  // 初始化物品卡片折叠状态（仅首次加载的物品折叠）
-  const initialItemCollapsed = {};
-  items.forEach(item => {
-    initialItemCollapsed[item.id] = true; // 仅首次加载的物品折叠
-  });
-  setItemCollapsed(initialItemCollapsed);
-
-  // 设置最近使用的分类
-  setCategory(recentCategory);
-
-  // 检查版本更新
-  checkVersionUpdate();
-
-  // 检查本地版本
-  const savedVersion = localStorage.getItem(VERSION_STORAGE_KEY) || "1.0.0";
-  if (savedVersion !== CURRENT_VERSION) {
-    localStorage.setItem(VERSION_STORAGE_KEY, CURRENT_VERSION);
-  }
-}, [categories, items, recentCategory]); // 仅依赖首次加载的变量
+  }, []); // ✅ 关键：空数组 = 仅组件首次挂载时执行一次，后续永不触发
 
   // ========== 版本更新检查 ==========
   const checkVersionUpdate = async () => {
@@ -466,54 +444,55 @@ useEffect(() => {
   };
 
   // 添加物品
-const addItem = () => {
-  if (!name || !price || !purchaseDate) {
-    alert("请填写名称、价格和购买日期（必填项）");
-    return;
-  }
-
-  let finalCategory = category;
-  if (category === "自定义") {
-    finalCategory = customCategory.trim();
-    if (!finalCategory) {
-      alert("请输入自定义分类名称");
+  const addItem = () => {
+    if (!name || !price || !purchaseDate) {
+      alert("请填写名称、价格和购买日期（必填项）");
       return;
     }
-    // 添加新分类到分类列表
-    addCustomCategory(finalCategory);
-  }
 
-  // 记忆本次选择的分类
-  setRecentCategory(finalCategory);
+    let finalCategory = category;
+    if (category === "自定义") {
+      finalCategory = customCategory.trim();
+      if (!finalCategory) {
+        alert("请输入自定义分类名称");
+        return;
+      }
+      // 添加新分类到分类列表
+      addCustomCategory(finalCategory);
+    }
 
-  const itemData = {
-    id: Date.now(),
-    name,
-    price: Number(price),
-    purchaseDate,
-    expireDate: expireDate || "",
-    type,
-    category: finalCategory,
-    quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
-    usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
-    additionalCosts: [...additionalCosts],
-    isFinished: false,
-    inTrash: false,
-    image: image || null
+    // 记忆本次选择的分类
+    setRecentCategory(finalCategory);
+
+    const itemData = {
+      id: Date.now(),
+      name,
+      price: Number(price),
+      purchaseDate,
+      expireDate: expireDate || "",
+      type,
+      category: finalCategory,
+      quantity: type === "consume" ? (quantity ? Number(quantity) : null) : null,
+      usedCount: type === "consume" ? (usedCount ? Number(usedCount) : 0) : null,
+      additionalCosts: [...additionalCosts],
+      isFinished: false,
+      inTrash: false,
+      image: image || null
+    };
+
+    setItems([...items, itemData]);
+    resetAddForm();
+    
+    // ✅ 新增：新物品默认展开（false = 展开）
+    setItemCollapsed(prev => ({
+      ...prev,
+      [itemData.id]: false // 关键：新添加的物品不折叠
+    }));
+    
+    // 更新折叠状态 - 新分类默认折叠
+    setCollapsed(prev => ({ ...prev, [finalCategory]: true }));
   };
 
-  setItems([...items, itemData]);
-  resetAddForm();
-  
-  // ✅ 新增：新物品默认展开（false = 展开）
-  setItemCollapsed(prev => ({
-    ...prev,
-    [itemData.id]: false // 关键：新添加的物品不折叠
-  }));
-  
-  // 更新折叠状态 - 新分类默认折叠
-  setCollapsed(prev => ({ ...prev, [finalCategory]: true }));
-};
   // 打开编辑弹窗
   const openEditModal = (item) => {
     setCurrentEditItem({ ...item });
@@ -1521,7 +1500,7 @@ const addItem = () => {
                     <div className="flex justify-between items-center mt-2 text-sm text-gray-600">
                       <div>
                         <span>{trans.date}</span>
-                        {transNote && (
+                        {trans.note && (
                           <span className="ml-2">| {trans.note}</span>
                         )}
                       </div>
@@ -1618,7 +1597,7 @@ const addItem = () => {
                     <input
                       type="date"
                       value={currentEditItem.purchaseDate || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, purchaseDate: e.target.value }))}
+                                          onChange={(e) => setCurrentEditItem(prev => ({ ...prev, purchaseDate: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
                     />
                   </div>
@@ -1634,7 +1613,7 @@ const addItem = () => {
                   </div>
 
                   <div>
-                     <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
                     <select
                       value={currentEditItem.type || "long"}
                       onChange={(e) => setCurrentEditItem(prev => ({ ...prev, type: e.target.value }))}
@@ -1646,19 +1625,33 @@ const addItem = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">物品分类</label>
-                    <input
-                      type="text"
+                    <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
+                    <select
                       value={currentEditItem.category || ""}
                       onChange={(e) => setCurrentEditItem(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                    >
+                      {allCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      <option value="自定义">自定义分类</option>
+                    </select>
+                    
+                    {currentEditItem.category === "自定义" && (
+                      <input
+                        type="text"
+                        placeholder="输入自定义分类名称"
+                        value={currentEditItem.customCategory || ""}
+                        onChange={(e) => setCurrentEditItem(prev => ({ ...prev, customCategory: e.target.value }))}
+                        className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      />
+                    )}
                   </div>
 
                   {currentEditItem.type === "consume" && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">总数量</label>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">总数量（可选）</label>
                         <input
                           type="number"
                           value={currentEditItem.quantity || ""}
@@ -1684,10 +1677,10 @@ const addItem = () => {
 
               <div className="mt-4">
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-gray-600">附加成本</label>
+                  <label className="block text-sm font-medium text-gray-600">附加成本（如运费、安装费）</label>
                   <button
                     onClick={addEditAdditionalCost}
-                    className="px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600"
+                    className="px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors"
                   >
                     添加
                   </button>
@@ -1711,7 +1704,7 @@ const addItem = () => {
               </div>
 
               <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选）</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -1735,21 +1728,21 @@ const addItem = () => {
                   </div>
                 )}
               </div>
+            </div>
 
-              <div className="mt-6 flex gap-3">
-                <button
-                  onClick={saveEdit}
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-                >
-                  保存修改
-                </button>
-                <button
-                  onClick={() => setEditModalVisible(false)}
-                  className="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
-                >
-                  取消
-                </button>
-              </div>
+            <div className="p-4 border-t flex gap-3 justify-end">
+              <button
+                onClick={() => setEditModalVisible(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={saveEdit}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                保存修改
+              </button>
             </div>
           </div>
         </div>
