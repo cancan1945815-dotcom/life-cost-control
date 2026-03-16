@@ -2,41 +2,66 @@ import React, { useState, useEffect, useRef } from "react";
 import ItemForm from "./components/ItemForm";
 import ItemCard from "./components/ItemCard";
 import TransactionForm from "./components/TransactionForm";
-import { 
-  CURRENT_VERSION, 
-  VERSION_STORAGE_KEY, 
-  REMOTE_VERSION_URL,
-  STORAGE_KEYS,
-  DEFAULT_CATEGORIES
-} from "./constants";
-import { 
-  safeParseStorage, 
-  getFinanceStats 
-} from "./utils";
+
+// 常量定义（如果单独抽离为constants.js，可删除此处，保留import）
+const CURRENT_VERSION = "4.0.0";
+const VERSION_STORAGE_KEY = "item_manager_version";
+const REMOTE_VERSION_URL = "";
+const STORAGE_KEYS = {
+  ITEMS: "item_manager_items",
+  OUTFIT_HISTORY: "item_manager_outfit_history",
+  TRANSACTIONS: "item_manager_transactions",
+  CATEGORIES: "item_manager_categories",
+  RECENT_CATEGORY: "item_manager_recent_category"
+};
+const DEFAULT_CATEGORIES = ["服饰", "美妆", "食品", "日用品", "数码产品"];
+
+// 工具函数（如果单独抽离为utils.js，可删除此处，保留import）
+const safeParseStorage = (key, defaultValue) => {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : defaultValue;
+  } catch (e) {
+    console.error(`解析本地存储${key}失败`, e);
+    return defaultValue;
+  }
+};
+
+const getFinanceStats = (transactions) => {
+  const totalExpense = transactions
+    .filter(t => t.type === "expense")
+    .reduce((sum, t) => sum + t.amount, 0)
+    .toFixed(2);
+    
+  const totalIncome = transactions
+    .filter(t => t.type === "income")
+    .reduce((sum, t) => sum + t.amount, 0)
+    .toFixed(2);
+    
+  const balance = (totalIncome - totalExpense).toFixed(2);
+  
+  return { totalExpense, totalIncome, balance };
+};
 
 export default function App() {
-  // ========== 核心状态（原有逻辑不变） ==========
+  // 核心状态
   const [items, setItems] = useState(() => 
     safeParseStorage(STORAGE_KEYS.ITEMS, [])
   );
-
   const [outfitHistory, setOutfitHistory] = useState(() => 
     safeParseStorage(STORAGE_KEYS.OUTFIT_HISTORY, [])
   );
-
   const [transactions, setTransactions] = useState(() => 
     safeParseStorage(STORAGE_KEYS.TRANSACTIONS, [])
   );
-
   const [categories, setCategories] = useState(() => 
     safeParseStorage(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES)
   );
-
   const [recentCategory, setRecentCategory] = useState(() => 
     localStorage.getItem(STORAGE_KEYS.RECENT_CATEGORY) || "服饰"
   );
 
-  // ========== 辅助状态（原有逻辑不变） ==========
+  // 辅助状态
   const [activeTab, setActiveTab] = useState("items");
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("全部");
@@ -49,10 +74,11 @@ export default function App() {
   const [importStatus, setImportStatus] = useState("");
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentEditItem, setCurrentEditItem] = useState(null);
+  const [showAddItemModal, setShowAddItemModal] = useState(false); // 添加物品弹窗
   
   const fileInputRef = useRef(null);
 
-  // ========== 本地存储 + 初始化 + 版本更新（原有逻辑不变） ==========
+  // 本地存储监听
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ITEMS, JSON.stringify(items));
   }, [items]);
@@ -73,6 +99,7 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.RECENT_CATEGORY, recentCategory);
   }, [recentCategory]);
 
+  // 初始化
   useEffect(() => {
     const initialCollapsed = {};
     categories.forEach(cat => {
@@ -86,6 +113,7 @@ export default function App() {
     }
   }, [categories]);
 
+  // 版本更新检查
   const checkVersionUpdate = async () => {
     try {
       const latestVersion = "4.0.0";
@@ -105,7 +133,7 @@ export default function App() {
     setUpdateAvailable(false);
   };
 
-  // ========== 数据导入导出（原有逻辑不变） ==========
+  // 数据导入导出
   const exportData = () => {
     const data = {
       items,
@@ -145,6 +173,7 @@ export default function App() {
         const mergedOutfits = [...outfitHistory];
         const mergedTransactions = [...transactions];
         const mergedCategories = [...new Set([...categories, ...(importedData.categories || [])])];
+        
         if (Array.isArray(importedData.items)) {
           importedData.items.forEach(item => {
             if (item.id && !mergedItems.some(i => i.id === item.id)) {
@@ -152,6 +181,7 @@ export default function App() {
             }
           });
         }
+        
         if (Array.isArray(importedData.outfitHistory)) {
           importedData.outfitHistory.forEach(outfit => {
             if (outfit.date && !mergedOutfits.some(o => o.date === outfit.date)) {
@@ -159,6 +189,7 @@ export default function App() {
             }
           });
         }
+        
         if (Array.isArray(importedData.transactions)) {
           importedData.transactions.forEach(trans => {
             if (trans.id && !mergedTransactions.some(t => t.id === trans.id)) {
@@ -166,11 +197,13 @@ export default function App() {
             }
           });
         }
+        
         setItems(mergedItems);
         setOutfitHistory(mergedOutfits);
         setTransactions(mergedTransactions);
         setCategories(mergedCategories);
         setImportStatus(`成功：导入 ${importedData.items?.length || 0} 个物品，${importedData.outfitHistory?.length || 0} 条穿搭记录，${importedData.transactions?.length || 0} 条记账记录`);
+        
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
@@ -181,7 +214,7 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // ========== 工具函数（原有逻辑不变） ==========
+  // 工具函数
   const toggleCollapse = (cat) => {
     setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
@@ -202,12 +235,13 @@ export default function App() {
     }
   };
 
-  // ========== 物品操作（原有逻辑不变） ==========
+  // 物品操作
   const handleAddItem = (itemData, finalCategory) => {
     setRecentCategory(finalCategory);
     setItems([...items, itemData]);
     setCollapsed(prev => ({ ...prev, [finalCategory]: true }));
     addCustomCategory(finalCategory);
+    setShowAddItemModal(false); // 添加成功后关闭弹窗
   };
 
   const handleEditItem = (updatedItem, finalCategory) => {
@@ -251,6 +285,17 @@ export default function App() {
     }));
   };
 
+  const handleUseMinus = (itemId) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        if (item.type !== "consume") return item;
+        const newUsedCount = Math.max(0, (item.usedCount || 0) - 1);
+        return { ...item, usedCount: newUsedCount };
+      }
+      return item;
+    }));
+  };
+
   const handleMarkFinished = (itemId) => {
     if (window.confirm("确定标记该物品为已耗尽吗？标记后将无法再增加使用次数！")) {
       setItems(items.map(item => {
@@ -268,7 +313,7 @@ export default function App() {
     }
   };
 
-  // ========== 穿搭功能（原有逻辑不变） ==========
+  // 穿搭功能
   const outfitAvailableItems = items.filter(item => 
     item.category === "服饰" && 
     item.type === "consume" && 
@@ -320,7 +365,7 @@ export default function App() {
     }
   };
 
-  // ========== 记账功能（原有逻辑不变） ==========
+  // 记账功能
   const handleAddTransaction = (newTrans) => {
     setTransactions([...transactions, newTrans]);
   };
@@ -331,7 +376,7 @@ export default function App() {
     }
   };
 
-  // ========== 筛选逻辑（原有逻辑不变） ==========
+  // 筛选逻辑
   const filteredItems = items
     .filter(item => !item.inTrash)
     .filter(item => filterCategory === "全部" || item.category === filterCategory)
@@ -347,10 +392,10 @@ export default function App() {
     .filter(t => t.note.toLowerCase().includes(search.toLowerCase()) || t.category.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // ========== 渲染（美化核心） ==========
+  // 渲染
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-4 sm:p-6 max-w-5xl mx-auto font-sans">
-      {/* 版本更新提醒（美化） */}
+      {/* 版本更新提醒 */}
       {(showUpdateAlert || updateAvailable) && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-white text-gray-800 p-4 rounded-lg shadow-xl z-50 max-w-md w-full border border-green-200">
           <div className="flex justify-between items-start">
@@ -391,7 +436,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 头部（美化） */}
+      {/* 头部 */}
       <header className="mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <div>
@@ -421,7 +466,7 @@ export default function App() {
           </div>
         </div>
         
-        {/* 标签页切换（美化） */}
+        {/* 标签页切换 */}
         <div className="flex border-b border-gray-200 mt-4 overflow-x-auto gap-1">
           <button
             onClick={() => setActiveTab("items")}
@@ -478,10 +523,10 @@ export default function App() {
         </div>
       </header>
 
-      {/* ========== 物品管理标签页（美化） ========== */}
+      {/* 物品管理标签页 */}
       {activeTab === "items" && (
         <>
-          {/* 搜索与筛选栏（美化） */}
+          {/* 搜索与筛选栏 */}
           <div className="bg-white rounded-xl shadow-sm p-4 mb-8 flex flex-col sm:flex-row gap-4">
             <input
               type="text"
@@ -502,23 +547,21 @@ export default function App() {
             </select>
           </div>
 
-          {/* 物品添加表单（美化） */}
-          <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-100">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-3 border-gray-100 flex items-center gap-2">
+          {/* 添加新物品按钮 */}
+          <div className="mb-8">
+            <button
+              onClick={() => setShowAddItemModal(true)}
+              className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0z"/>
                 <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-1 0A7 7 0 1 0 1 8a7 7 0 0 0 14 0z"/>
               </svg>
               添加新物品
-            </h2>
-            <ItemForm 
-              categories={categories} 
-              onSubmit={handleAddItem}
-              recentCategory={recentCategory}
-            />
+            </button>
           </div>
 
-          {/* 物品列表（美化） */}
+          {/* 物品列表 */}
           <div className="mb-12">
             <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
@@ -569,6 +612,7 @@ export default function App() {
                           }}
                           onDelete={handleDeleteItem}
                           onUseOnce={handleUseOnce}
+                          onUseMinus={handleUseMinus}
                           onMarkFinished={handleMarkFinished}
                           onCopy={handleCopyItem}
                           initiallyCollapsed={true}
@@ -583,10 +627,10 @@ export default function App() {
         </>
       )}
 
-      {/* ========== 每日穿搭标签页（美化） ========== */}
+      {/* 每日穿搭标签页 */}
       {activeTab === "outfit" && (
         <div className="space-y-8 mb-12">
-          {/* 今日穿搭选择区（美化） */}
+          {/* 今日穿搭选择区 */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-pink-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
@@ -649,7 +693,7 @@ export default function App() {
             )}
           </div>
 
-          {/* 历史穿搭记录（美化） */}
+          {/* 历史穿搭记录 */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-pink-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
@@ -700,10 +744,10 @@ export default function App() {
         </div>
       )}
 
-      {/* ========== 记账管理标签页（美化） ========== */}
+      {/* 记账管理标签页 */}
       {activeTab === "finance" && (
         <div className="space-y-8 mb-12">
-          {/* 财务统计卡片（美化） */}
+          {/* 财务统计卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-red-500 border border-gray-100 hover:shadow transition-all">
               <h3 className="text-sm text-gray-500 mb-2 flex items-center gap-1">
@@ -738,7 +782,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 添加记账记录（美化） */}
+          {/* 添加记账记录 */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-green-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
@@ -749,7 +793,7 @@ export default function App() {
             <TransactionForm onAdd={handleAddTransaction} />
           </div>
 
-          {/* 记账记录列表（美化） */}
+          {/* 记账记录列表 */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
               <h2 className="text-xl font-semibold text-green-600 flex items-center gap-2">
@@ -835,7 +879,47 @@ export default function App() {
         </div>
       )}
 
-      {/* ========== 编辑物品弹窗（美化） ========== */}
+      {/* 添加物品弹窗 */}
+      {showAddItemModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
+            <div className="p-5 border-b flex justify-between items-center bg-gray-50">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0z"/>
+                  <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-1 0A7 7 0 1 0 1 8a7 7 0 0 0 14 0z"/>
+                </svg>
+                添加新物品
+              </h3>
+              <button
+                onClick={() => setShowAddItemModal(false)}
+                className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <ItemForm 
+                categories={categories} 
+                onSubmit={handleAddItem}
+                recentCategory={recentCategory}
+              />
+            </div>
+
+            <div className="p-5 border-t flex gap-3 justify-end bg-gray-50">
+              <button
+                onClick={() => setShowAddItemModal(false)}
+                className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑物品弹窗 */}
       {editModalVisible && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">

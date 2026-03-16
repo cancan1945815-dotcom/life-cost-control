@@ -5,13 +5,14 @@ const ItemCard = ({
   onEdit,
   onDelete,
   onUseOnce,
+  onUseMinus,
   onMarkFinished,
   onCopy,
   initiallyCollapsed = true
 }) => {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
 
-  // ========== 核心修改：精准计算不同类型物品的成本展示 ==========
+  // 计算不同类型物品的成本展示信息
   const calculateCostInfo = () => {
     if (!item.price) return { mainText: "¥0.00", subText: "" };
 
@@ -22,7 +23,7 @@ const ItemCard = ({
     if (item.type === "long") {
       if (!item.purchaseDate) return { mainText: "¥0.00/日", subText: `总价：¥${totalCost.toFixed(2)}` };
       
-      // 计算购买至今的天数
+      // 计算购买至今的天数（最少1天，避免除以0）
       const purchaseDate = new Date(item.purchaseDate);
       const today = new Date();
       const daysPassed = Math.max(1, Math.floor((today - purchaseDate) / (1000 * 60 * 60 * 24)));
@@ -65,7 +66,7 @@ const ItemCard = ({
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      {/* 折叠头部：显示核心信息 + 成本 */}
+      {/* ========== 折叠头部：显示核心信息 + 成本 ========== */}
       <div
         className="px-4 py-3 flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 cursor-pointer bg-gray-50 hover:bg-gray-100"
         onClick={() => setCollapsed(!collapsed)}
@@ -79,18 +80,19 @@ const ItemCard = ({
           </div>
         </div>
 
-        {/* ========== 成本展示：区分长期/消耗品 ========== */}
+        {/* 成本展示：区分长期/消耗品 */}
         <div className="text-right ml-2">
           <div className="text-sm font-medium text-gray-700">{costInfo.mainText}</div>
           <div className="text-xs text-gray-500">{costInfo.subText}</div>
         </div>
       </div>
 
-      {/* 操作按钮：复制 + 使用 + 编辑 */}
-      <div className="px-4 pb-2 flex gap-2 bg-white">
+      {/* ========== 操作按钮区：复制 + 增减使用次数 + 编辑 ========== */}
+      <div className="px-4 pb-2 flex gap-2 bg-white flex-wrap">
+        {/* 复制按钮 */}
         <button
           onClick={(e) => {
-            e.stopPropagation();
+            e.stopPropagation(); // 防止触发折叠/展开
             onCopy(item);
           }}
           className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
@@ -98,21 +100,44 @@ const ItemCard = ({
           复制
         </button>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onUseOnce(item.id);
-          }}
-          disabled={item.type !== "consume" || item.isFinished}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            item.type !== "consume" || item.isFinished
-              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-              : "bg-green-600 text-white hover:bg-green-700"
-          }`}
-        >
-          使用
-        </button>
+        {/* 消耗品专属：使用次数增减按钮组 */}
+        {item.type === "consume" && (
+          <div className="flex gap-1">
+            {/* 减1按钮（禁用条件：已用次数≤0 或 已耗尽） */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onUseMinus(item.id);
+              }}
+              disabled={item.isFinished || (item.usedCount || 0) <= 0}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                item.isFinished || (item.usedCount || 0) <= 0
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  : "bg-red-600 text-white hover:bg-red-700"
+              }`}
+            >
+              减1
+            </button>
 
+            {/* 加1按钮（禁用条件：已耗尽） */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onUseOnce(item.id);
+              }}
+              disabled={item.isFinished}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                item.isFinished
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  : "bg-green-600 text-white hover:bg-green-700"
+              }`}
+            >
+              加1
+            </button>
+          </div>
+        )}
+
+        {/* 编辑按钮 */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -124,17 +149,19 @@ const ItemCard = ({
         </button>
       </div>
 
-      {/* 展开内容（保留原有逻辑） */}
+      {/* ========== 展开内容（保留原有详情） ========== */}
       {!collapsed && (
         <div className="p-4 border-t border-gray-100 text-sm space-y-3">
+          {/* 价格信息 */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>购入价：¥{item.price?.toFixed(2) || 0}</div>
             <div>购买日期：{item.purchaseDate || "未填写"}</div>
             {item.expireDate && <div>到期日：{item.expireDate}</div>}
-            {/* 新增：显示总成本 */}
+            {/* 总成本（含附加成本） */}
             <div colSpan="2">总成本：¥{(item.price + (item.additionalCosts?.reduce((sum, c) => sum + c.amt, 0) || 0)).toFixed(2)}</div>
           </div>
 
+          {/* 附加成本 */}
           {item.additionalCosts?.length > 0 && (
             <div className="text-xs text-gray-600">
               附加成本：
@@ -146,6 +173,7 @@ const ItemCard = ({
             </div>
           )}
 
+          {/* 展开后的操作按钮（保留原有） */}
           <div className="flex gap-2 pt-2">
             <button
               onClick={() => onEdit(item)}
