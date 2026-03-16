@@ -34,7 +34,7 @@ const ItemCard = ({
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      {/* ========== 折叠头部：收起时也能看到 复制 + 使用 ========== */}
+      {/* ========== 折叠头部：收起时显示核心信息 ========== */}
       <div
         className="px-4 py-3 flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 cursor-pointer bg-gray-50 hover:bg-gray-100"
         onClick={() => setCollapsed(!collapsed)}
@@ -53,26 +53,44 @@ const ItemCard = ({
         </div>
       </div>
 
-      {/* ========== 折叠头部下方：复制 + 使用 按钮（永远显示） ========== */}
+      {/* ========== 折叠头部下方：复制 + 使用 + 编辑 按钮（永远显示） ========== */}
       <div className="px-4 pb-2 flex gap-2 bg-white">
+        {/* 复制按钮 */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             onCopy(item);
           }}
-          className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
         >
           复制
         </button>
 
+        {/* 使用按钮（仅消耗品可点击） */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             onUseOnce(item.id);
           }}
-          className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+          disabled={item.type !== "consume" || item.isFinished}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            item.type !== "consume" || item.isFinished
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+              : "bg-green-600 text-white hover:bg-green-700"
+          }`}
         >
           使用
+        </button>
+
+        {/* 新增：编辑按钮 */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(item);
+          }}
+          className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+        >
+          编辑
         </button>
       </div>
 
