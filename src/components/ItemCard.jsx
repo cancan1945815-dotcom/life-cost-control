@@ -12,7 +12,7 @@ const ItemCard = ({
 }) => {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
 
-  // 计算不同类型物品的成本展示信息
+  // 修正：计算不同类型物品的成本展示信息
   const calculateCostInfo = () => {
     if (!item.price) return { mainText: "¥0.00", subText: "" };
 
@@ -45,16 +45,16 @@ const ItemCard = ({
         unitCost = totalCost / item.quantity;
         unitDesc = "单件成本";
       } 
-      // 无数量 → 按使用次数算
+      // 无数量 → 单次成本=总价/已使用次数（修正核心：去掉+1）
       else {
-        const useTimes = (item.usedCount || 0) + 1;
+        const useTimes = Math.max(1, item.usedCount || 0); // 最少1次，避免除以0
         unitCost = totalCost / useTimes;
         unitDesc = "单次成本";
       }
 
       return {
         mainText: `¥${unitCost.toFixed(2)}/${item.quantity ? "件" : "次"}`, // 单价
-        subText: `总价：¥${totalCost.toFixed(2)} | ${unitDesc}` // 总价+单价说明
+        subText: `总价：¥${totalCost.toFixed(2)} | ${unitDesc}（已用${item.usedCount || 0}${item.quantity ? "件" : "次"}）`
       };
     }
 
