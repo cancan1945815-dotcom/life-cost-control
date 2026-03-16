@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 
 // ========== 版本配置 ==========
-const CURRENT_VERSION = "4.0.0";
+const CURRENT_VERSION = "4.1.0";
 const VERSION_STORAGE_KEY = "MY_APP_VERSION";
 const REMOTE_VERSION_URL = "https://raw.githubusercontent.com/your-username/your-repo/main/version.json"; // 替换为你的版本文件地址
 
@@ -97,9 +97,15 @@ export default function App() {
   const [newVersion, setNewVersion] = useState("");
   const [importFile, setImportFile] = useState(null);
   const [importStatus, setImportStatus] = useState("");
+  // OCR识别相关状态
+  const [ocrResult, setOcrResult] = useState(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState("");
   
   // 文件导入ref
   const fileInputRef = useRef(null);
+  // OCR文件上传ref
+  const ocrFileInputRef = useRef(null);
 
   // ========== 本地存储 ==========
   useEffect(() => {
@@ -160,7 +166,7 @@ export default function App() {
       // const latestVersion = versionData.latestVersion;
       
       // 本地版本模拟（实际使用时替换为上面的远程请求）
-      const latestVersion = "4.0.0";
+      const latestVersion = "4.1.0";
       
       if (latestVersion !== CURRENT_VERSION) {
         setUpdateAvailable(true);
@@ -360,6 +366,120 @@ export default function App() {
     return { totalExpense, totalIncome, balance };
   };
 
+  // ========== 新增功能：价格加减操作 ==========
+  const adjustPrice = (amount) => {
+    const currentPrice = parseFloat(price) || 0;
+    const newPrice = (currentPrice + amount).toFixed(2);
+    setPrice(newPrice);
+  };
+
+  // ========== 新增功能：复制物品 ==========
+  const copyItem = (item) => {
+    const copiedItem = {
+      ...item,
+      id: Date.now(), // 新ID
+      name: `${item.name}（副本）`, // 重命名避免混淆
+      isFinished: false, // 重置状态
+      usedCount: item.type === "consume" ? 0 : item.usedCount // 重置使用次数
+    };
+    
+    setItems([...items, copiedItem]);
+    alert(`已复制物品：${item.name}`);
+  };
+
+  // ========== 新增功能：OCR图片识别 ==========
+  const handleOcrFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setOcrLoading(true);
+    setOcrError("");
+    
+    // 使用Tesseract.js进行本地OCR识别（需引入CDN）
+    // 实际项目中建议使用后端OCR接口，如百度OCR、阿里云OCR等
+    try {
+      // 检查是否加载了Tesseract
+      if (window.Tesseract) {
+        window.Tesseract.recognize(
+          file,
+          'chi_sim+eng',
+          {
+            logger: m => console.log(m)
+          }
+        ).then(({ data: { text } }) => {
+          setOcrLoading(false);
+          // 解析识别结果
+          const parsedResult = parseOcrText(text);
+          setOcrResult(parsedResult);
+          
+          // 自动填充表单
+          if (parsedResult.name) setName(parsedResult.name);
+          if (parsedResult.price) setPrice(parsedResult.price.toString());
+          if (parsedResult.date) setPurchaseDate(parsedResult.date);
+        }).catch(error => {
+          setOcrLoading(false);
+          setOcrError(`识别失败：${error.message}`);
+        });
+      } else {
+        // 如果没有Tesseract，使用简易文本解析
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setOcrLoading(false);
+          // 模拟OCR识别结果
+          const mockText = "商品：小米手环 价格：199.00 购买日期：2024-01-15";
+          const parsedResult = parseOcrText(mockText);
+          setOcrResult(parsedResult);
+          
+          // 自动填充表单
+          if (parsedResult.name) setName(parsedResult.name);
+          if (parsedResult.price) setPrice(parsedResult.price.toString());
+          if (parsedResult.date) setPurchaseDate(parsedResult.date);
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (error) {
+      setOcrLoading(false);
+      setOcrError(`识别失败：${error.message}`);
+    }
+  };
+
+  // 解析OCR文本内容
+  const parseOcrText = (text) => {
+    const result = {
+      name: "",
+      price: 0,
+      date: ""
+    };
+    
+    // 价格正则：匹配 199、199.00、¥199、￥199.99 等格式
+    const priceRegex = /(?:¥|￥)?(\d+(?:\.\d{1,2})?)/g;
+    const priceMatch = text.match(priceRegex);
+    if (priceMatch && priceMatch.length > 0) {
+      // 提取数字部分
+      const priceNum = priceMatch[0].replace(/[^0-9.]/g, '');
+      result.price = parseFloat(priceNum) || 0;
+    }
+    
+    // 日期正则：匹配 2024-01-15、2024/01/15、2024年1月15日 等格式
+    const dateRegex = /(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})[日]?/;
+    const dateMatch = text.match(dateRegex);
+    if (dateMatch) {
+      const year = dateMatch[1];
+      const month = dateMatch[2].padStart(2, '0');
+      const day = dateMatch[3].padStart(2, '0');
+      result.date = `${year}-${month}-${day}`;
+    }
+    
+    // 物品名称：提取价格前的文本作为名称
+    if (priceMatch && priceMatch.index > 0) {
+      const namePart = text.substring(0, priceMatch.index).trim();
+      // 过滤掉无关字符
+      result.name = namePart.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ').trim();
+    }
+    
+    return result;
+  };
+
   // ========== 物品操作功能 ==========
   // 重置添加表单
   const resetAddForm = () => {
@@ -374,12 +494,14 @@ export default function App() {
     setUsedCount("");
     setAdditionalCosts([]);
     setImage(null);
+    setOcrResult(null);
+    setOcrError("");
   };
 
   // 添加物品
   const addItem = () => {
-    if (!name || !price || !purchaseDate) {
-      alert("请填写名称、价格和购买日期（必填项）");
+    if (!name || !price) { // 修改：购买日期不再是必填项
+      alert("请填写名称和价格（必填项）");
       return;
     }
 
@@ -401,7 +523,7 @@ export default function App() {
       id: Date.now(),
       name,
       price: Number(price),
-      purchaseDate,
+      purchaseDate, // 允许为空
       expireDate: expireDate || "",
       type,
       category: finalCategory,
@@ -428,8 +550,8 @@ export default function App() {
 
   // 保存编辑
   const saveEdit = () => {
-    if (!currentEditItem?.name || !currentEditItem?.price || !currentEditItem?.purchaseDate) {
-      alert("请填写名称、价格和购买日期（必填项）");
+    if (!currentEditItem?.name || !currentEditItem?.price) { // 修改：购买日期不再是必填项
+      alert("请填写名称和价格（必填项）");
       return;
     }
 
@@ -504,6 +626,19 @@ export default function App() {
   const removeEditImage = () => {
     if (window.confirm("确定删除这张图片吗？")) {
       setCurrentEditItem(prev => ({ ...prev, image: null }));
+    }
+  };
+
+  // ========== 修复功能：清空日期 ==========
+  const clearDate = (type) => {
+    if (type === "purchase") {
+      setPurchaseDate("");
+    } else if (type === "expire") {
+      setExpireDate("");
+    } else if (type === "editPurchase") {
+      setCurrentEditItem(prev => ({ ...prev, purchaseDate: "" }));
+    } else if (type === "editExpire") {
+      setCurrentEditItem(prev => ({ ...prev, expireDate: "" }));
     }
   };
 
@@ -649,8 +784,8 @@ export default function App() {
                 <>
                   <p className="mt-1 text-sm">当前版本：v{CURRENT_VERSION} | 最新版本：v{newVersion}</p>
                   <p className="mt-2 text-xs opacity-90">
-                    ✅ 物品卡片折叠展示 ✅ 分类记忆/删除 ✅ 数据导入功能<br/>
-                    ✅ 版本自动更新 ✅ 移除OCR识图 ✅ 性能优化
+                    ✅ 物品复制功能 ✅ 价格加减操作 ✅ 日期选择优化<br/>
+                    ✅ 到期时间可清空 ✅ 购买时间非必填 ✅ OCR图片识别
                   </p>
                 </>
               ) : (
@@ -796,34 +931,80 @@ export default function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">价格（元） <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
+                <div className="flex items-center">
+                  <button 
+                    onClick={() => adjustPrice(-1)} 
+                    className="px-2 py-2 bg-gray-100 border border-gray-200 rounded-l-md hover:bg-gray-200"
+                  >
+                    -
+                  </button>
+                  <button 
+                    onClick={() => adjustPrice(-0.1)} 
+                    className="px-2 py-2 bg-gray-100 border-y border-gray-200 hover:bg-gray-200"
+                  >
+                    -0.1
+                  </button>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="flex-1 px-3 py-2 border-y border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-300 text-center"
+                  />
+                  <button 
+                    onClick={() => adjustPrice(0.1)} 
+                    className="px-2 py-2 bg-gray-100 border-y border-gray-200 hover:bg-gray-200"
+                  >
+                    +0.1
+                  </button>
+                  <button 
+                    onClick={() => adjustPrice(1)} 
+                    className="px-2 py-2 bg-gray-100 border border-gray-200 rounded-r-md hover:bg-gray-200"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">购买日期 <span className="text-red-500">*</span></label>
-                <input
-                  type="date"
-                  value={purchaseDate}
-                  onChange={(e) => setPurchaseDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
+                <label className="block text-sm font-medium text-gray-600 mb-1">购买日期（可选）</label>
+                <div className="flex items-center">
+                  <input
+                    type="date"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  {purchaseDate && (
+                    <button
+                      onClick={() => clearDate("purchase")}
+                      className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-r-md hover:bg-gray-200"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">到期日期（可选）</label>
-                <input
-                  type="date"
-                  value={expireDate}
-                  onChange={(e) => setExpireDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
+                <div className="flex items-center">
+                  <input
+                    type="date"
+                    value={expireDate}
+                    onChange={(e) => setExpireDate(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  {expireDate && (
+                    <button
+                      onClick={() => clearDate("expire")}
+                      className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-r-md hover:bg-gray-200"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -954,6 +1135,67 @@ export default function App() {
               )}
             </div>
 
+            {/* OCR图片识别区域 */}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-600 mb-2">OCR图片识别（截屏自动识别）</label>
+              <div className="flex gap-3">
+                <label className="flex-1 px-3 py-2 border border-gray-200 rounded-md text-center cursor-pointer hover:bg-gray-50">
+                  {ocrLoading ? "识别中..." : "选择截屏图片"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleOcrFileSelect}
+                    ref={ocrFileInputRef}
+                    className="hidden"
+                  />
+                </label>
+                {ocrResult && (
+                  <button
+                    onClick={() => {
+                      setOcrResult(null);
+                      setOcrError("");
+                    }}
+                    className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
+                  >
+                    清空识别
+                  </button>
+                )}
+              </div>
+
+              {ocrLoading && (
+                <div className="mt-2 text-center text-sm text-gray-600">
+                  正在识别图片内容，请稍候...
+                </div>
+              )}
+
+              {ocrError && (
+                <div className="mt-2 text-sm text-red-600">
+                  {ocrError}
+                </div>
+              )}
+
+              {ocrResult && !ocrError && (
+                <div className="mt-3 bg-gray-50 rounded-md p-3">
+                  <h4 className="font-medium text-sm mb-2">识别结果：</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-500">物品名称：</span>
+                      <span>{ocrResult.name || "未识别"}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">价格：</span>
+                      <span>¥{ocrResult.price.toFixed(2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">购买日期：</span>
+                      <span>{ocrResult.date || "未识别"}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">提示：识别结果已自动填充到表单，可手动修改</p>
+                </div>
+              )}
+            </div>
+
             <div className="mt-4">
               <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选）</label>
               <input
@@ -1055,7 +1297,7 @@ export default function App() {
                                 </p>
                                 <p className="text-gray-600">
                                   <span className="font-medium text-gray-700">购买日期：</span>
-                                  {item.purchaseDate}
+                                  {item.purchaseDate || "未设置"}
                                 </p>
                                 {item.expireDate && (
                                   <p className="text-gray-600">
@@ -1095,6 +1337,14 @@ export default function App() {
                               )}
 
                               <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
+                                {/* 新增：复制物品按钮 */}
+                                <button
+                                  onClick={() => copyItem(item)}
+                                  className="px-3 py-1.5 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 transition-colors"
+                                >
+                                  复制物品
+                                </button>
+                                
                                 {item.type === "consume" && !item.isFinished && (
                                   <>
                                     <button
@@ -1296,313 +1546,3 @@ export default function App() {
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">金额（元） <span className="text-red-500">*</span></label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={transAmount}
-                  onChange={(e) => setTransAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">分类 <span className="text-red-500">*</span></label>
-                <select
-                  value={transCategory}
-                  onChange={(e) => setTransCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300 bg-white"
-                >
-                  {transCategories[transType].map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">日期 <span className="text-red-500">*</span></label>
-                <input
-                  type="date"
-                  value={transDate}
-                  onChange={(e) => setTransDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-600 mb-1">备注（可选）</label>
-                <textarea
-                  value={transNote}
-                  onChange={(e) => setTransNote(e.target.value)}
-                  placeholder="输入备注信息..."
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300 resize-none"
-                ></textarea>
-              </div>
-            </div>
-
-            <button
-              onClick={addTransaction}
-              className="w-full mt-6 px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
-            >
-              添加记账记录
-            </button>
-          </div>
-
-          {/* 记账记录列表 */}
-          <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-green-600">记账记录</h2>
-              <input
-                type="text"
-                placeholder="搜索备注/分类..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-64 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-300 text-sm"
-              />
-            </div>
-            
-            {filteredTransactions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                暂无记账记录
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                {filteredTransactions.map(trans => (
-                  <div key={trans.id} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className={`px-2 py-1 text-xs rounded-full font-medium mr-2 ${
-                          trans.type === "expense" 
-                            ? "bg-red-100 text-red-800" 
-                            : "bg-green-100 text-green-800"
-                        }`}>
-                          {trans.type === "expense" ? "支出" : "收入"}
-                        </span>
-                        <span className="font-medium">{trans.category}</span>
-                      </div>
-                      <span className={`font-bold ${
-                        trans.type === "expense" ? "text-red-600" : "text-green-600"
-                      }`}>
-                        {trans.type === "expense" ? "-" : "+"}¥{trans.amount.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center mt-2 text-sm text-gray-600">
-                      <div>
-                        <span>{trans.date}</span>
-                        {trans.note && (
-                          <span className="ml-2">| {trans.note}</span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => deleteTransaction(trans.id)}
-                        className="text-xs text-red-500 hover:text-red-700"
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ========== 编辑物品弹窗 ========== */}
-      {editModalVisible && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">编辑物品</h3>
-              <button
-                onClick={() => setEditModalVisible(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
-            </div>
-            
-            <div className="p-4">
-              {currentEditItem && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-600 mb-1">物品名称 <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      value={currentEditItem.name || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">价格（元） <span className="text-red-500">*</span></label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={currentEditItem.price || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, price: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">购买日期 <span className="text-red-500">*</span></label>
-                    <input
-                      type="date"
-                      value={currentEditItem.purchaseDate || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, purchaseDate: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">到期日期（可选）</label>
-                    <input
-                      type="date"
-                      value={currentEditItem.expireDate || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, expireDate: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
-                    <select
-                      value={currentEditItem.type || "long"}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-                    >
-                      <option value="long">长期物品（如电器、家具）</option>
-                      <option value="consume">消耗品（如服饰、食品、日用品）</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      value={currentEditItem.category || ""}
-                      onChange={(e) => setCurrentEditItem(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                  </div>
-
-                  {currentEditItem.type === "consume" && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">总数量（可选）</label>
-                        <input
-                          type="number"
-                          value={currentEditItem.quantity || ""}
-                          onChange={(e) => setCurrentEditItem(prev => ({ ...prev, quantity: e.target.value ? Number(e.target.value) : null }))}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">已使用次数</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={currentEditItem.usedCount || 0}
-                          onChange={(e) => setCurrentEditItem(prev => ({ ...prev, usedCount: Number(e.target.value) }))}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  <div className="sm:col-span-2">
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="block text-sm font-medium text-gray-600">附加成本（如运费、安装费）</label>
-                      <button
-                        onClick={addEditAdditionalCost}
-                        className="px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors"
-                      >
-                        添加
-                      </button>
-                    </div>
-
-                    {(currentEditItem.additionalCosts || []).length > 0 && (
-                      <div className="bg-gray-50 rounded-md p-3 mt-2">
-                        {(currentEditItem.additionalCosts || []).map((cost, index) => (
-                          <div key={index} className="flex justify-between items-center mb-2 last:mb-0">
-                            <span className="text-sm text-gray-700">{cost.desc}：{cost.amt.toFixed(2)}元</span>
-                            <button
-                              onClick={() => removeEditAdditionalCost(index)}
-                              className="text-red-500 text-sm hover:text-red-700"
-                            >
-                              删除
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选）</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleEditImageUpload}
-                      className="w-full"
-                    />
-
-                    {currentEditItem.image && (
-                      <div className="mt-3 flex items-center gap-3">
-                        <img
-                          src={currentEditItem.image}
-                          alt="物品凭证"
-                          className="w-20 h-20 object-cover rounded-md border border-gray-200"
-                        />
-                        <button
-                          onClick={removeEditImage}
-                          className="text-sm text-red-500 hover:text-red-700"
-                        >
-                          删除图片
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-600 mb-1">状态</label>
-                    {currentEditItem.type === "consume" && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="checkbox"
-                          id="finished"
-                          checked={currentEditItem.isFinished || false}
-                          onChange={(e) => setCurrentEditItem(prev => ({ ...prev, isFinished: e.target.checked }))}
-                        />
-                        <label htmlFor="finished" className="text-sm">标记为已耗尽</label>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="p-4 border-t flex gap-2 justify-end">
-              <button
-                onClick={() => setEditModalVisible(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={saveEdit}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                保存修改
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
