@@ -1,17 +1,7 @@
-import React, { useState, useEffect } from "react"; // 新增 useEffect 导入
+import React, { useState, useEffect } from "react";
 import Calculator from "./Calculator";
 
-/**
- * 物品添加/编辑表单组件
- * @param {Object} props
- * @param {Object} props.item - 物品数据（编辑时传入）
- * @param {Array} props.categories - 分类列表
- * @param {Function} props.onSubmit - 提交回调
- * @param {string} props.recentCategory - 最近使用的分类
- * @returns {JSX.Element} 物品表单组件
- */
 const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
-  // 初始化表单状态
   const [formState, setFormState] = useState({
     name: item.name || "",
     price: item.price?.toString() || "",
@@ -26,19 +16,14 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
     image: item.image || null
   });
   
-  // 计算器相关状态
   const [calculatorValue, setCalculatorValue] = useState(formState.price);
   const [showCalculator, setShowCalculator] = useState(false);
 
-  // ========== 新增：复制物品后自动聚焦优化 ==========
   useEffect(() => {
-    // 检测是否是复制的物品（名称含「副本」且不是编辑模式）
     if (item.name?.includes("（副本）") && !item.id) {
       const nameInput = document.querySelector('input[placeholder="如：纯棉T恤、无线鼠标"]');
       if (nameInput) {
-        // 聚焦输入框
         nameInput.focus();
-        // 选中「（副本）」后缀，方便用户快速修改
         const suffixIndex = nameInput.value.indexOf('（副本）');
         if (suffixIndex > -1) {
           nameInput.setSelectionRange(suffixIndex, nameInput.value.length);
@@ -47,13 +32,11 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
     }
   }, [item]);
 
-  // 更新表单值
   const handleChange = (field, value) => {
     setFormState(prev => ({ ...prev, [field]: value }));
     if (field === "price") setCalculatorValue(value);
   };
 
-  // 计算器按键处理
   const handleCalculatorKeyPress = (key) => {
     if (key === "C") {
       setCalculatorValue("");
@@ -78,7 +61,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
     }
   };
 
-  // 添加附加成本
   const addAdditionalCost = () => {
     const desc = prompt("请输入附加成本描述（如：运费、安装费）：");
     const amt = prompt("请输入附加成本金额（元）：");
@@ -92,7 +74,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
     }));
   };
 
-  // 移除附加成本
   const removeAdditionalCost = (index) => {
     setFormState(prev => ({
       ...prev,
@@ -100,26 +81,27 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
     }));
   };
 
-  // 处理图片上传
+  // ====================== 修复：图片永久保存（Base64） ======================
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    handleChange("image", url);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleChange("image", reader.result); // 保存 Base64
+    };
+    reader.readAsDataURL(file);
   };
 
-  // 移除图片
   const removeImage = () => {
     if (window.confirm("确定删除这张图片吗？")) {
       handleChange("image", null);
     }
   };
 
-  // 提交表单
   const handleSubmit = () => {
     const { customCategory, ...submitData } = formState;
     
-    // 处理自定义分类
     let finalCategory = submitData.category;
     if (finalCategory === "自定义") {
       finalCategory = customCategory.trim();
@@ -129,7 +111,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
       }
     }
 
-    // 转换数值类型
     submitData.price = Number(submitData.price);
     if (submitData.type === "consume") {
       submitData.quantity = submitData.quantity ? Number(submitData.quantity) : null;
@@ -139,7 +120,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
       submitData.usedCount = null;
     }
 
-    // 补充必要字段
     submitData.category = finalCategory;
     submitData.id = item.id || Date.now();
     submitData.isFinished = item.isFinished || false;
@@ -150,7 +130,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {/* 物品名称 */}
       <div className="sm:col-span-2">
         <label className="block text-sm font-medium text-gray-600 mb-1">物品名称 <span className="text-red-500">*</span></label>
         <input
@@ -162,7 +141,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         />
       </div>
 
-      {/* 价格 */}
       <div className="sm:col-span-2">
         <label className="block text-sm font-medium text-gray-600 mb-1">价格（元） <span className="text-red-500">*</span></label>
         <div className="relative">
@@ -181,13 +159,11 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
           </button>
         </div>
         
-        {/* 计算器面板 */}
         {showCalculator && (
           <Calculator value={calculatorValue} onKeyPress={handleCalculatorKeyPress} />
         )}
       </div>
 
-      {/* 购买日期 */}
       <div>
         <label className="block text-sm font-medium text-gray-600 mb-1">购买日期 <span className="text-red-500">*</span></label>
         <input
@@ -198,7 +174,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         />
       </div>
 
-      {/* 到期日期 */}
       <div>
         <label className="block text-sm font-medium text-gray-600 mb-1">到期日期（可选）</label>
         <input
@@ -209,7 +184,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         />
       </div>
 
-      {/* 物品类型 */}
       <div>
         <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
         <select
@@ -222,7 +196,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         </select>
       </div>
 
-      {/* 物品分类 */}
       <div>
         <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
         
@@ -251,7 +224,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         )}
       </div>
 
-      {/* 消耗品专属字段 */}
       {formState.type === "consume" && (
         <>
           <div>
@@ -279,7 +251,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         </>
       )}
 
-      {/* 附加成本 */}
       <div className="sm:col-span-2 mt-4">
         <div className="flex justify-between items-center mb-2">
           <label className="block text-sm font-medium text-gray-600">附加成本（如运费、安装费）</label>
@@ -308,7 +279,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         )}
       </div>
 
-      {/* 图片上传 */}
       <div className="sm:col-span-2 mt-4">
         <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选）</label>
         <input
@@ -335,7 +305,6 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
         )}
       </div>
 
-      {/* 提交按钮 */}
       <div className="sm:col-span-2 mt-6">
         <button
           onClick={handleSubmit}

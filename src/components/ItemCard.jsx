@@ -87,6 +87,17 @@ const ItemCard = ({
         </div>
       </div>
 
+      {/* ====================== 图片显示（新增） ====================== */}
+      {item.image && (
+        <div className="px-4 pb-3">
+          <img 
+            src={item.image} 
+            alt="物品" 
+            className="w-full h-44 object-cover rounded-lg border border-gray-100"
+          />
+        </div>
+      )}
+
       {/* ========== 操作按钮区：复制 + 增减使用次数 + 编辑 ========== */}
       <div className="px-4 pb-2 flex gap-2 bg-white flex-wrap">
         {/* 复制按钮 */}
@@ -116,7 +127,7 @@ const ItemCard = ({
                   : "bg-red-600 text-white hover:bg-red-700"
               }`}
             >
-              减1
+             减1
             </button>
 
             {/* 加1按钮（禁用条件：已耗尽） */}
