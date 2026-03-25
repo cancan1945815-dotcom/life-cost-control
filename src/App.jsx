@@ -44,14 +44,18 @@ const getFinanceStats = (transactions) => {
   return { totalExpense, totalIncome, balance };
 };
 
-// 新增：计算非消耗品每日成本
+// ====================== 【新增】计算每日成本工具函数 ======================
 const calculateDailyCost = (purchaseDate, price) => {
   if (!purchaseDate || !price || price <= 0) return "0.00";
-  const buyDay = new Date(purchaseDate);
-  const now = new Date();
-  const diffTime = now - buyDay;
-  const days = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-  return (Number(price) / days).toFixed(2);
+  try {
+    const buyDay = new Date(purchaseDate);
+    const now = new Date();
+    const diffTime = now - buyDay;
+    const days = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+    return (price / days).toFixed(2);
+  } catch (e) {
+    return "0.00";
+  }
 };
 
 export default function App() {
@@ -90,8 +94,9 @@ export default function App() {
   const [currentEditItem, setCurrentEditItem] = useState(null);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [totalValueExpanded, setTotalValueExpanded] = useState(false);
-  // 新增：物品卡片折叠状态
-  const [itemExpanded, setItemExpanded] = useState({});
+  
+  // ====================== 【新增】物品折叠展开状态 ======================
+  const [itemExpandState, setItemExpandState] = useState({});
   
   const fileInputRef = useRef(null);
 
@@ -357,6 +362,14 @@ export default function App() {
     if (window.confirm("确定删除该物品吗？删除后无法恢复！")) {
       setItems(items.filter(i => i.id !== itemId));
     }
+  };
+
+  // ====================== 【新增】切换物品展开/折叠 ======================
+  const toggleItemExpand = (itemId) => {
+    setItemExpandState(prev => ({
+      ...prev,
+      [itemId]: !prev[itemId]
+    }));
   };
 
   // 穿搭功能
@@ -664,16 +677,7 @@ export default function App() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const subCat = prompt("请输入子分类名称");
-                          if (subCat) addCustomCategory(`${category}/${subCat}`);
-                        }}
-                        className="text-xs text-green-600"
-                      >
-                        +子分类
-                      </button>
+                      {/* ====================== 【已移除】子分类按钮 ====================== */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -691,69 +695,81 @@ export default function App() {
 
                   {!collapsed[category] && (
                     <div className="mt-3 space-y-3">
-                      {groupedItems[category].map(item => (
-                        <div key={item.id} className="relative bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-                          {/* 物品卡片折叠头部 - 只显示名称、图片、成本 */}
-                          <div 
-                            className="p-4 flex items-center gap-3 cursor-pointer"
-                            onClick={() => setItemExpanded(prev => ({...prev, [item.id]: !prev[item.id]}))}
-                          >
-                            {/* 图片 */}
-                            {item.image && (
-                              <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0">
-                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                              </div>
-                            )}
-                            {/* 名称 */}
-                            <div className="flex-1 font-medium text-gray-800">{item.name}</div>
-                            
-                            {/* 成本显示 */}
-                            <div className="text-right">
-                              {item.type === "consume" ? (
-                                <>
-                                  <div className="text-sm text-purple-600">
-                                    单次：¥{(item.price / (item.usedCount || 1)).toFixed(2)}
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="text-sm text-blue-600">
-                                  每日：¥{calculateDailyCost(item.purchaseDate, item.price)}
+                      {groupedItems[category].map(item => {
+                        const isExpanded = itemExpandState[item.id];
+                        const dailyCost = calculateDailyCost(item.purchaseDate, item.price);
+                        return (
+                          <div key={item.id} className="relative bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            {/* 折叠头部：只显示 名称 + 图片 + 成本 */}
+                            <div 
+                              onClick={() => toggleItemExpand(item.id)}
+                              className="p-4 cursor-pointer flex items-center gap-4"
+                            >
+                              {/* 图片 */}
+                              {item.image && (
+                                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                                  <img 
+                                    src={item.image} 
+                                    alt={item.name} 
+                                    className="w-full h-full object-cover"
+                                  />
                                 </div>
                               )}
+                              
+                              {/* 名称 + 成本 */}
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-medium text-gray-800 truncate">{item.name}</h3>
+                                <div className="mt-1 text-sm">
+                                  {item.type === "consume" ? (
+                                    <span className="text-purple-600">
+                                      单次成本：¥{(item.price / (Math.max(1, Number(item.usedCount || 0)))).toFixed(2)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-blue-600">
+                                      每日成本：¥{dailyCost}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* 展开/收起箭头 */}
+                              <span className="text-gray-400">
+                                {isExpanded ? "▲" : "▼"}
+                              </span>
                             </div>
-                          </div>
 
-                          {/* 展开后显示全部功能 */}
-                          {itemExpanded[item.id] && (
-                            <div className="border-t p-4">
-                              <ItemCard
-                                item={item}
-                                onEdit={(item) => {
-                                  setCurrentEditItem(item);
-                                  setEditModalVisible(true);
-                                }}
-                                onDelete={handleDeleteItem}
-                                onUseOnce={handleUseOnce}
-                                onUseMinus={handleUseMinus}
-                                onMarkFinished={handleMarkFinished}
-                                onCopy={handleCopyItem}
-                                initiallyCollapsed={false}
-                              />
-                            </div>
-                          )}
-                          
-                          {/* 物品移动分类下拉框 */}
-                          <select
-                            onChange={(e) => moveItemToCategory(item.id, e.target.value)}
-                            className="absolute top-2 right-2 text-xs border rounded p-1 bg-white z-10"
-                            defaultValue={item.category}
-                          >
-                            {categories.map(c => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
+                            {/* 展开后显示完整功能 */}
+                            {isExpanded && (
+                              <div className="border-t p-4">
+                                <ItemCard
+                                  item={item}
+                                  onEdit={(item) => {
+                                    setCurrentEditItem(item);
+                                    setEditModalVisible(true);
+                                  }}
+                                  onDelete={handleDeleteItem}
+                                  onUseOnce={handleUseOnce}
+                                  onUseMinus={handleUseMinus}
+                                  onMarkFinished={handleMarkFinished}
+                                  onCopy={handleCopyItem}
+                                  initiallyCollapsed={true}
+                                />
+                              </div>
+                            )}
+
+                            {/* 移动物品分类 */}
+                            <select
+                              onChange={(e) => moveItemToCategory(item.id, e.target.value)}
+                              className="absolute top-2 right-2 text-xs border rounded p-1 bg-white z-10"
+                              defaultValue={item.category}
+                            >
+                              {categories.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
