@@ -28,6 +28,15 @@ const safeParseStorage = (key, defaultValue) => {
   }
 };
 
+// ==================== 【新增】计算非消耗品每日成本 ====================
+const calculateDailyCost = (price, purchaseDate) => {
+  if (!price || !purchaseDate) return "0.00";
+  const buyDay = new Date(purchaseDate);
+  const today = new Date();
+  const days = Math.max(1, Math.floor((today - buyDay) / (1000 * 60 * 60 * 24)));
+  return (Number(price) / days).toFixed(2);
+};
+
 const getFinanceStats = (transactions) => {
   const totalExpense = transactions
     .filter(t => t.type === "expense")
@@ -42,20 +51,6 @@ const getFinanceStats = (transactions) => {
   const balance = (totalIncome - totalExpense).toFixed(2);
   
   return { totalExpense, totalIncome, balance };
-};
-
-// ====================== 【新增】非消耗品每日成本计算 ======================
-const calculateDailyCost = (purchaseDate, price) => {
-  if (!purchaseDate || !price || price <= 0) return "0.00";
-  try {
-    const buyDay = new Date(purchaseDate);
-    const today = new Date();
-    const diffTime = today - buyDay;
-    const days = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-    return (price / days).toFixed(2);
-  } catch {
-    return "0.00";
-  }
 };
 
 export default function App() {
@@ -442,10 +437,10 @@ export default function App() {
 
   // 渲染
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 sm:p-6 max-w-5xl mx-auto font-sans">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-4 sm:p-6 max-w-5xl mx-auto font-sans">
       {/* 版本更新提醒 */}
       {(showUpdateAlert || updateAvailable) && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-white text-gray-800 p-4 rounded-xl shadow-2xl z-50 max-w-md w-full border border-green-200 transform transition-all duration-300">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-white text-gray-800 p-4 rounded-lg shadow-xl z-50 max-w-md w-full border border-green-200">
           <div className="flex justify-between items-start">
             <div>
               <h3 className="font-bold text-lg text-green-600">🎉 {updateAvailable ? "新版本可用" : "版本更新完成"}</h3>
@@ -465,7 +460,7 @@ export default function App() {
               {updateAvailable && (
                 <button 
                   onClick={performUpdate}
-                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors"
+                  className="px-2 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 transition-colors"
                 >
                   立即更新
                 </button>
@@ -475,7 +470,7 @@ export default function App() {
                   setShowUpdateAlert(false);
                   setUpdateAvailable(false);
                 }}
-                className="text-gray-500 hover:text-gray-700 w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100"
+                className="text-gray-500 hover:text-gray-700"
               >
                 ×
               </button>
@@ -486,11 +481,11 @@ export default function App() {
 
       {/* 顶部悬浮添加按钮（固定顶部，不随滚动）*/}
       {activeTab === "items" && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-lg backdrop-blur-md bg-opacity-95 px-4 py-3 flex justify-between items-center">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md px-4 py-3 flex justify-between items-center">
           <h1 className="text-lg font-bold text-blue-600">物品管理</h1>
           <button
             onClick={() => setShowAddItemModal(true)}
-            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium shadow hover:shadow-lg transition-all"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow hover:bg-blue-700"
           >
             ➕ 添加新物品
           </button>
@@ -507,11 +502,11 @@ export default function App() {
           <div className="flex gap-3">
             <button 
               onClick={exportData}
-              className="px-4 py-2 text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-md transition-all"
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm hover:shadow"
             >
               导出数据
             </button>
-            <label className="px-4 py-2 text-sm bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-md transition-all cursor-pointer">
+            <label className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all shadow-sm hover:shadow cursor-pointer">
               导入数据
               <input
                 type="file"
@@ -539,7 +534,7 @@ export default function App() {
           >
             物品管理
             {activeTab === "items" && (
-              <span className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-sm"></span>
+              <span className="absolute bottom-0 left-0 w-full h-1 bg-blue-600 rounded-t-sm"></span>
             )}
           </button>
           <button
@@ -552,7 +547,7 @@ export default function App() {
           >
             每日穿搭
             {activeTab === "outfit" && (
-              <span className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-pink-500 to-pink-600 rounded-t-sm"></span>
+              <span className="absolute bottom-0 left-0 w-full h-1 bg-pink-600 rounded-t-sm"></span>
             )}
           </button>
           <button
@@ -565,7 +560,7 @@ export default function App() {
           >
             记账管理
             {activeTab === "finance" && (
-              <span className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-green-600 rounded-t-sm"></span>
+              <span className="absolute bottom-0 left-0 w-full h-1 bg-green-600 rounded-t-sm"></span>
             )}
           </button>
         </div>
@@ -588,7 +583,7 @@ export default function App() {
       {activeTab === "items" && (
         <>
           {/* 搜索与筛选栏 */}
-          <div className="bg-white rounded-xl shadow-md p-4 mb-6 flex flex-col sm:flex-row gap-4 transform hover:shadow-lg transition-shadow">
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-col sm:flex-row gap-4">
             <input
               type="text"
               placeholder="搜索物品名称..."
@@ -596,6 +591,8 @@ export default function App() {
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent transition-all"
             />
+            
+            {/* ==================== 【新增】筛选器支持删除分类 ==================== */}
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
@@ -603,13 +600,15 @@ export default function App() {
             >
               <option value="全部">全部分类</option>
               {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
               ))}
             </select>
           </div>
 
           {/* 总价值统计模块 */}
-          <div className="bg-white rounded-xl shadow-md p-4 mb-6 border border-gray-100 hover:shadow-lg transition-shadow">
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
             <div 
               className="flex justify-between items-center cursor-pointer"
               onClick={() => setTotalValueExpanded(!totalValueExpanded)}
@@ -623,9 +622,9 @@ export default function App() {
             {totalValueExpanded && (
               <div className="mt-3 pt-3 border-t">
                 {Object.keys(groupedItems).map(cat => (
-                  <div key={cat} className="flex justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+                  <div key={cat} className="flex justify-between text-sm py-1">
                     <span>{cat}</span>
-                    <span className="font-medium">¥{calculateCategoryTotalValue(cat)}</span>
+                    <span>¥{calculateCategoryTotalValue(cat)}</span>
                   </div>
                 ))}
               </div>
@@ -642,7 +641,7 @@ export default function App() {
             </h2>
 
             {Object.keys(groupedItems).length === 0 ? (
-              <div className="bg-white rounded-xl shadow-md p-10 text-center border border-gray-100">
+              <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="#e5e7eb" viewBox="0 0 16 16" className="mx-auto mb-4">
                   <path d="M2.5 2.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11zm2-2a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM0 13a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5V6a.5.5 0 0 0-1 0v7a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5V6a.5.5 0 0 0-1 0v7z"/>
                 </svg>
@@ -654,7 +653,7 @@ export default function App() {
                 <div key={category} className="mb-6">
                   <div
                     onClick={() => toggleCollapse(category)}
-                    className="bg-white rounded-lg px-5 py-3.5 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition-all shadow-md border border-gray-100"
+                    className="bg-white rounded-lg px-5 py-3.5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-all shadow-sm border border-gray-100"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-800">
@@ -666,22 +665,24 @@ export default function App() {
                     </div>
                     
                     <div className="flex items-center gap-3">
+                      {/* 【原有】添加子分类 */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           const subCat = prompt("请输入子分类名称");
                           if (subCat) addCustomCategory(`${category}/${subCat}`);
                         }}
-                        className="text-xs text-green-600 hover:text-green-700"
+                        className="text-xs text-green-600"
                       >
                         +子分类
                       </button>
+                      {/* 【原有】删除分类 */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteCategory(category);
                         }}
-                        className="text-xs text-red-500 hover:text-red-600"
+                        className="text-xs text-red-500"
                       >
                         删除分类
                       </button>
@@ -695,31 +696,46 @@ export default function App() {
                     <div className="mt-3 space-y-3">
                       {groupedItems[category].map(item => (
                         <div key={item.id} className="relative">
-                          <ItemCard
-                            item={item}
-                            onEdit={(item) => {
-                              setCurrentEditItem(item);
-                              setEditModalVisible(true);
-                            }}
-                            onDelete={handleDeleteItem}
-                            onUseOnce={handleUseOnce}
-                            onUseMinus={handleUseMinus}
-                            onMarkFinished={handleMarkFinished}
-                            onCopy={handleCopyItem}
-                            initiallyCollapsed={true}
-                          />
-
-                          {/* ====================== 【新增】非消耗品每日成本显示 ====================== */}
-                          {item.type !== "consume" && (
-                            <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs px-2 py-1 rounded-full shadow-md">
-                              每日成本 ¥{calculateDailyCost(item.purchaseDate, item.price)}
+                          {/* ==================== 【优化】物品卡片：折叠仅显示名称、图片、成本 ==================== */}
+                          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+                            <div className="flex items-start gap-3">
+                              {/* 图片（持久化存储，退出不丢失） */}
+                              {item.image && (
+                                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                                  <img 
+                                    src={item.image} 
+                                    alt={item.name} 
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              )}
+                              
+                              <div className="flex-1 min-w-0">
+                                {/* 名称 */}
+                                <h3 className="font-medium text-gray-800 truncate">
+                                  {item.name}
+                                </h3>
+                                
+                                {/* 成本展示：非消耗品=每日成本，消耗品=单次成本 */}
+                                <div className="mt-1">
+                                  {item.type !== "consume" ? (
+                                    <p className="text-sm text-blue-600 font-bold">
+                                      每日成本：¥{calculateDailyCost(item.price, item.purchaseDate)}
+                                    </p>
+                                  ) : (
+                                    <p className="text-sm text-green-600 font-bold">
+                                      单次成本：¥{(Number(item.price) / ((item.usedCount || 0) + 1)).toFixed(2)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          )}
+                          </div>
 
                           {/* 物品移动分类下拉框 */}
                           <select
                             onChange={(e) => moveItemToCategory(item.id, e.target.value)}
-                            className="absolute top-2 right-2 text-xs border rounded p-1 bg-white z-10 shadow-sm"
+                            className="absolute top-2 right-2 text-xs border rounded p-1 bg-white z-10"
                             defaultValue={item.category}
                           >
                             {categories.map(c => (
@@ -741,7 +757,7 @@ export default function App() {
       {activeTab === "outfit" && (
         <div className="space-y-8 mb-12">
           {/* 今日穿搭选择区 */}
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-pink-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
@@ -776,7 +792,7 @@ export default function App() {
                     <div
                       key={item.id}
                       onClick={() => toggleOutfitItem(item.id)}
-                      className={`border rounded-xl p-4 cursor-pointer transition-all shadow-md hover:shadow-lg ${
+                      className={`border rounded-xl p-4 cursor-pointer transition-all shadow-sm hover:shadow ${
                         selectedOutfitItems.includes(item.id)
                           ? "border-pink-500 bg-pink-50 ring-2 ring-pink-200"
                           : "border-gray-200 hover:border-gray-300"
@@ -795,7 +811,7 @@ export default function App() {
 
                 <button
                   onClick={saveTodayOutfit}
-                  className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-pink-600 text-white rounded-lg font-medium hover:shadow-lg transition-all"
+                  className="w-full py-3.5 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 transition-all shadow-sm hover:shadow"
                 >
                   保存今日穿搭记录
                 </button>
@@ -804,7 +820,7 @@ export default function App() {
           </div>
 
           {/* 历史穿搭记录 */}
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-pink-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
@@ -859,7 +875,7 @@ export default function App() {
         <div className="space-y-8 mb-12">
           {/* 财务统计卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-            <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-red-500 border border-gray-100 hover:shadow-lg transition-all">
+            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-red-500 border border-gray-100 hover:shadow transition-all">
               <h3 className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
@@ -869,7 +885,7 @@ export default function App() {
               </h3>
               <p className="text-2xl font-bold text-red-600">¥{getFinanceStats(transactions).totalExpense}</p>
             </div>
-            <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-green-500 border border-gray-100 hover:shadow-lg transition-all">
+            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500 border border-gray-100 hover:shadow transition-all">
               <h3 className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
@@ -879,7 +895,7 @@ export default function App() {
               </h3>
               <p className="text-2xl font-bold text-green-600">¥{getFinanceStats(transactions).totalIncome}</p>
             </div>
-            <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-blue-500 border border-gray-100 hover:shadow-lg transition-all">
+            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500 border border-gray-100 hover:shadow transition-all">
               <h3 className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-7-4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 9 4z"/>
@@ -893,7 +909,7 @@ export default function App() {
           </div>
 
           {/* 添加记账记录 */}
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-green-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M14 3H2v10h12V3zM2 2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H2z"/>
@@ -904,12 +920,12 @@ export default function App() {
           </div>
 
           {/* 记账记录列表 */}
-          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
               <h2 className="text-xl font-semibold text-green-600 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M12 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0zm0 1c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 4c.628 0 1.168-.452 1.293-.892 0-.08-.008-.162-.025-.242l-.008-.015c-.012-.022-.026-.043-.04-.063-.014-.02-.028-.039-.042-.058a1.901 1.901 0 0 0-.128-.122c-.012-.012-.025-.023-.037-.035-.012-.012-.024-.023-.036-.035-.011-.011-.022-.022-.033-.033-.011-.011-.022-.021-.032-.032-.01-.01-.02-.02-.03-.03-.009-.009-.019-.018-.028-.027-.009-.009-.018-.018-.027-.027-.008-.008-.016-.016-.024-.024-.008-.008-.016-.016-.024-.024-.007-.007-.014-.014-.021-.021-.007-.007-.014-.014-.021-.021-.006-.006-.012-.012-.018-.018-.006-.006-.012-.012-.018-.018-.005-.005-.01-.01-.015-.015-.005-.005-.01-.01-.015-.015-.004-.004-.008-.008-.012-.012-.004-.004-.008-.008-.012-.012-.003-.003-.006-.006-.009-.009-.003-.003-.006-.006-.009-.009-.002-.002-.004-.004-.006-.006-.002-.002-.004-.004-.006-.006-.001-.001-.002-.002-.003-.003z"/>
-                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0 5 5 0 0 1-10 0z"/>
+                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0A5 5 0 0 1 3 8z"/>
                 </svg>
                 记账记录
               </h2>
@@ -926,7 +942,7 @@ export default function App() {
               <div className="text-center py-10 text-gray-500">
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="#e5e7eb" viewBox="0 0 16 16" className="mx-auto mb-4">
                   <path d="M12 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0zm0 1c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 4c.628 0 1.168-.452 1.293-.892 0-.08-.008-.162-.025-.242l-.008-.015c-.012-.022-.026-.043-.04-.063-.014-.02-.028-.039-.042-.058a1.901 1.901 0 0 0-.128-.122c-.012-.012-.025-.023-.037-.035-.012-.012-.024-.023-.036-.035-.011-.011-.022-.022-.033-.033-.011-.011-.022-.021-.032-.032-.01-.01-.02-.02-.03-.03-.009-.009-.019-.018-.028-.027-.009-.009-.018-.018-.027-.027-.008-.008-.016-.016-.024-.024-.008-.008-.016-.016-.024-.024-.007-.007-.014-.014-.021-.021-.007-.007-.014-.014-.021-.021-.006-.006-.012-.012-.018-.018-.006-.006-.012-.012-.018-.018-.005-.005-.01-.01-.015-.015-.005-.005-.01-.01-.015-.015-.004-.004-.008-.008-.012-.012-.004-.004-.008-.008-.012-.012-.003-.003-.006-.006-.009-.009-.003-.003-.006-.006-.009-.009-.002-.002-.004-.004-.006-.006-.002-.002-.004-.004-.006-.006-.001-.001-.002-.002-.003-.003z"/>
-                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0 5 5 0 0 1-10 0z"/>
+                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0A5 5 0 0 1 3 8z"/>
                 </svg>
                 暂无记账记录
               </div>
@@ -991,8 +1007,8 @@ export default function App() {
 
       {/* 添加物品弹窗 */}
       {showAddItemModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
             <div className="p-5 border-b flex justify-between items-center bg-gray-50">
               <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
@@ -1033,8 +1049,8 @@ export default function App() {
 
       {/* 编辑物品弹窗 */}
       {editModalVisible && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
             <div className="p-5 border-b flex justify-between items-center bg-gray-50">
               <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
