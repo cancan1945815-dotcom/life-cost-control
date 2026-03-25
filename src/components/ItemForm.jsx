@@ -1,74 +1,151 @@
-import React, { useState } from "react";
-import ItemForm from "./ItemForm";
+import React, { useState, useEffect } from "react";
 
-const ItemCard = ({ 
-  item, onEdit, onDelete, onUseOnce, onUseMinus, onMarkFinished, onCopy, onMoveCategory, categories
+const ItemForm = ({
+  item,
+  categories,
+  onSubmit,
+  recentCategory,
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const isEdit = !!item;
+  const [form, setForm] = useState({
+    id: item?.id || Date.now(),
+    name: item?.name || "",
+    category: item?.category || recentCategory || "服饰",
+    price: item?.price || "",
+    type: item?.type || "consume",
+    usedCount: item?.usedCount || 0,
+    isFinished: item?.isFinished || false,
+    note: item?.note || "",
+    image: item?.image || null,
+  });
 
-  const calculateTotalCost = () => {
-    const base = Number(item.price) || 0;
-    const add = (item.additionalCosts || []).reduce((s, c) => s + (Number(c.amt) || 0), 0);
-    return base + add;
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const calculateCostPerUse = () => {
-    const total = calculateTotalCost();
-    const used = item.usedCount || 0;
-    return used === 0 ? total.toFixed(2) : (total / used).toFixed(2);
+  const handleImage = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm((prev) => ({ ...prev, image: reader.result }));
+    reader.readAsDataURL(file);
   };
 
-  const calculateUnitCost = () => {
-    if (!item.quantity) return null;
-    return (calculateTotalCost() / Number(item.quantity)).toFixed(2);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(form, form.category);
   };
-
-  if (isEditing) {
-    return (
-      <div className="bg-white p-4 rounded-lg shadow-md border">
-        <ItemForm item={item} categories={categories} onSubmit={(d)=>{onEdit(d);setIsEditing(false);}} />
-        <button onClick={()=>setIsEditing(false)} className="mt-3 w-full py-2 bg-gray-200 rounded">取消</button>
-      </div>
-    );
-  }
 
   return (
-    <div className={`bg-white p-4 rounded-lg shadow-md border ${item.isFinished?"bg-gray-50 border-gray-400":""}`}>
-      <div className="flex justify-between items-center">
-        <h3 className="font-semibold">{item.name}</h3>
-        <button onClick={()=>setExpanded(!expanded)} className="text-sm text-blue-600">{expanded?"收起 ↑":"展开 ↓"}</button>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">物品名称</label>
+        <input
+          required
+          name="name"
+          value={form.name}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded"
+        />
       </div>
 
-      {/* 折叠时极简显示 */}
-      {!expanded && (
-        <div className="mt-1 text-sm flex gap-3">
-          <span>单次 ¥{calculateCostPerUse()}</span>
-          {calculateUnitCost() && <span>单价 ¥{calculateUnitCost()}</span>}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">分类</label>
+        <select
+          required
+          name="category"
+          value={form.category}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded"
+        >
+          {categories.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">单价</label>
+        <input
+          required
+          type="number"
+          step="0.01"
+          name="price"
+          value={form.price}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">物品类型</label>
+        <select
+          name="type"
+          value={form.type}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded"
+        >
+          <option value="consume">消耗品</option>
+          <option value="permanent">非消耗品</option>
+        </select>
+      </div>
+
+      {form.type === "consume" && (
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">已使用次数</label>
+            <input
+              type="number"
+              min="0"
+              name="usedCount"
+              value={form.usedCount}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex items-center">
+            <label className="text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                name="isFinished"
+                checked={form.isFinished}
+                onChange={(e) => setForm((prev) => ({ ...prev, isFinished: e.target.checked }))}
+                className="mr-1"
+              />
+              已耗尽
+            </label>
+          </div>
         </div>
       )}
 
-      {expanded && (
-        <div className="mt-2 text-sm">
-          <p>分类：{item.category}</p>
-          <p>总成本：¥{calculateTotalCost().toFixed(2)}</p>
-          <p>已使用：{item.usedCount || 0} 次</p>
-          {item.quantity && <p>总量：{item.quantity}</p>}
-          {item.image && <img src={item.image} className="w-full h-32 object-cover rounded mt-2" />}
-        </div>
-      )}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">图片</label>
+        <input type="file" accept="image/*" onChange={handleImage} className="w-full" />
+        {form.image && (
+          <img src={form.image} alt="" className="mt-2 h-20 object-cover rounded border" />
+        )}
+      </div>
 
-      {expanded && (
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {item.type ==="consume" && !item.isFinished && <button onClick={()=>onUseOnce(item.id)} className="py-1 bg-green-500 text-white rounded text-sm">使用一次</button>}
-          <button onClick={()=>setIsEditing(true)} className="py-1 bg-blue-500 text-white rounded text-sm">编辑</button>
-          <button onClick={()=>onCopy(item)} className="py-1 bg-purple-500 text-white rounded text-sm">复制</button>
-          <button onClick={()=>{const newCat=prompt("输入目标分类",item.category);if(newCat)onMoveCategory(item.id,newCat);}} className="py-1 bg-yellow-500 text-white rounded text-sm">移动分类</button>
-          <button onClick={()=>onDelete(item.id)} className="col-span-2 py-1 bg-red-500 text-white rounded text-sm">删除</button>
-        </div>
-      )}
-    </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
+        <textarea
+          name="note"
+          value={form.note}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded"
+          rows="2"
+        />
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+      >
+        {isEdit ? "保存修改" : "添加物品"}
+      </button>
+    </form>
   );
 };
 
-export default ItemCard;
+export default ItemForm;

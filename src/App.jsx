@@ -3,8 +3,8 @@ import ItemForm from "./components/ItemForm";
 import ItemCard from "./components/ItemCard";
 import TransactionForm from "./components/TransactionForm";
 
-// 常量定义（如果单独抽离为constants.js，可删除此处，保留import）
-const CURRENT_VERSION = "4.0.0";
+// 常量定义
+const CURRENT_VERSION = "5.0.0";
 const VERSION_STORAGE_KEY = "item_manager_version";
 const REMOTE_VERSION_URL = "";
 const STORAGE_KEYS = {
@@ -12,11 +12,12 @@ const STORAGE_KEYS = {
   OUTFIT_HISTORY: "item_manager_outfit_history",
   TRANSACTIONS: "item_manager_transactions",
   CATEGORIES: "item_manager_categories",
-  RECENT_CATEGORY: "item_manager_recent_category"
+  RECENT_CATEGORY: "item_manager_recent_category",
+  LAST_ALBUM_PATH: "item_manager_last_album_path"
 };
 const DEFAULT_CATEGORIES = ["服饰", "美妆", "食品", "日用品", "数码产品"];
 
-// 工具函数（如果单独抽离为utils.js，可删除此处，保留import）
+// 工具函数
 const safeParseStorage = (key, defaultValue) => {
   try {
     const value = localStorage.getItem(key);
@@ -60,6 +61,9 @@ export default function App() {
   const [recentCategory, setRecentCategory] = useState(() => 
     localStorage.getItem(STORAGE_KEYS.RECENT_CATEGORY) || "服饰"
   );
+  const [lastAlbumPath, setLastAlbumPath] = useState(() => 
+    localStorage.getItem(STORAGE_KEYS.LAST_ALBUM_PATH) || "/"
+  );
 
   // 辅助状态
   const [activeTab, setActiveTab] = useState("items");
@@ -74,11 +78,12 @@ export default function App() {
   const [importStatus, setImportStatus] = useState("");
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentEditItem, setCurrentEditItem] = useState(null);
-  const [showAddItemModal, setShowAddItemModal] = useState(false); // 添加物品弹窗
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [totalValueExpanded, setTotalValueExpanded] = useState(false);
   
   const fileInputRef = useRef(null);
 
-  // 本地存储监听
+  // 本地存储持久化
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ITEMS, JSON.stringify(items));
   }, [items]);
@@ -99,6 +104,10 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.RECENT_CATEGORY, recentCategory);
   }, [recentCategory]);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.LAST_ALBUM_PATH, lastAlbumPath);
+  }, [lastAlbumPath]);
+
   // 初始化
   useEffect(() => {
     const initialCollapsed = {};
@@ -116,7 +125,7 @@ export default function App() {
   // 版本更新检查
   const checkVersionUpdate = async () => {
     try {
-      const latestVersion = "4.0.0";
+      const latestVersion = "5.0.0";
       if (latestVersion !== CURRENT_VERSION) {
         setUpdateAvailable(true);
         setNewVersion(latestVersion);
@@ -140,6 +149,7 @@ export default function App() {
       outfitHistory,
       transactions,
       categories,
+      lastAlbumPath,
       exportTime: new Date().toISOString(),
       version: CURRENT_VERSION
     };
@@ -173,6 +183,8 @@ export default function App() {
         const mergedOutfits = [...outfitHistory];
         const mergedTransactions = [...transactions];
         const mergedCategories = [...new Set([...categories, ...(importedData.categories || [])])];
+        
+        if (importedData.lastAlbumPath) setLastAlbumPath(importedData.lastAlbumPath);
         
         if (Array.isArray(importedData.items)) {
           importedData.items.forEach(item => {
@@ -214,7 +226,7 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // 工具函数
+  // 分类操作
   const toggleCollapse = (cat) => {
     setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
@@ -235,13 +247,35 @@ export default function App() {
     }
   };
 
+  // 移动物品到其他分类
+  const moveItemToCategory = (itemId, targetCategory) => {
+    setItems(items.map(item => 
+      item.id === itemId ? { ...item, category: targetCategory } : item
+    ));
+  };
+
+  // 计算分类总价值
+  const calculateCategoryTotalValue = (categoryName) => {
+    return filteredItems
+      .filter(item => item.category === categoryName)
+      .reduce((sum, item) => sum + (Number(item.price) || 0), 0)
+      .toFixed(2);
+  };
+
+  // 计算所有物品总价值
+  const calculateAllItemsTotalValue = () => {
+    return filteredItems
+      .reduce((sum, item) => sum + (Number(item.price) || 0), 0)
+      .toFixed(2);
+  };
+
   // 物品操作
   const handleAddItem = (itemData, finalCategory) => {
     setRecentCategory(finalCategory);
     setItems([...items, itemData]);
     setCollapsed(prev => ({ ...prev, [finalCategory]: true }));
     addCustomCategory(finalCategory);
-    setShowAddItemModal(false); // 添加成功后关闭弹窗
+    setShowAddItemModal(false);
   };
 
   const handleEditItem = (updatedItem, finalCategory) => {
@@ -436,8 +470,21 @@ export default function App() {
         </div>
       )}
 
+      {/* 顶部悬浮添加按钮（固定顶部，不随滚动）*/}
+      {activeTab === "items" && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md px-4 py-3 flex justify-between items-center">
+          <h1 className="text-lg font-bold text-blue-600">物品管理</h1>
+          <button
+            onClick={() => setShowAddItemModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow hover:bg-blue-700"
+          >
+            ➕ 添加新物品
+          </button>
+        </div>
+      )}
+
       {/* 头部 */}
-      <header className="mb-8">
+      <header className={`mb-8 ${activeTab === "items" ? "mt-20" : ""}`}>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <div>
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">米米去处 · 全能管理</h1>
@@ -527,7 +574,7 @@ export default function App() {
       {activeTab === "items" && (
         <>
           {/* 搜索与筛选栏 */}
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-8 flex flex-col sm:flex-row gap-4">
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-col sm:flex-row gap-4">
             <input
               type="text"
               placeholder="搜索物品名称..."
@@ -547,18 +594,28 @@ export default function App() {
             </select>
           </div>
 
-          {/* 添加新物品按钮 */}
-          <div className="mb-8">
-            <button
-              onClick={() => setShowAddItemModal(true)}
-              className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
+          {/* 总价值统计模块 */}
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
+            <div 
+              className="flex justify-between items-center cursor-pointer"
+              onClick={() => setTotalValueExpanded(!totalValueExpanded)}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0z"/>
-                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-1 0A7 7 0 1 0 1 8a7 7 0 0 0 14 0z"/>
-              </svg>
-              添加新物品
-            </button>
+              <div className="font-medium text-gray-800">
+                全部物品总价值：<span className="text-blue-600 font-bold">¥{calculateAllItemsTotalValue()}</span>
+              </div>
+              <span className="text-blue-600 text-sm">{totalValueExpanded ? "收起详情" : "展开详情"}</span>
+            </div>
+            
+            {totalValueExpanded && (
+              <div className="mt-3 pt-3 border-t">
+                {Object.keys(groupedItems).map(cat => (
+                  <div key={cat} className="flex justify-between text-sm py-1">
+                    <span>{cat}</span>
+                    <span>¥{calculateCategoryTotalValue(cat)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 物品列表 */}
@@ -585,38 +642,69 @@ export default function App() {
                     onClick={() => toggleCollapse(category)}
                     className="bg-white rounded-lg px-5 py-3.5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-all shadow-sm border border-gray-100"
                   >
-                    <span className="font-medium text-gray-800">{category}（{groupedItems[category].length}件）</span>
-                    <span className="text-gray-500 flex items-center gap-1">
-                      {collapsed[category] ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                          <path fillRule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
-                        </svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                          <path fillRule="evenodd" d="M1.646 10.646a.5.5 0 0 1 .708 0L8 4.707l5.646 5.647a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708.708L8 4.707l-5.646 5.647a.5.5 0 0 1 0-.708z"/>
-                        </svg>
-                      )}
-                      {collapsed[category] ? "展开" : "收起"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-800">
+                        {category}（{groupedItems[category].length}件）
+                      </span>
+                      <span className="text-blue-600 font-bold">
+                        ¥{calculateCategoryTotalValue(category)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const subCat = prompt("请输入子分类名称");
+                          if (subCat) addCustomCategory(`${category}/${subCat}`);
+                        }}
+                        className="text-xs text-green-600"
+                      >
+                        +子分类
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteCategory(category);
+                        }}
+                        className="text-xs text-red-500"
+                      >
+                        删除分类
+                      </button>
+                      <span className="text-gray-500 flex items-center gap-1">
+                        {collapsed[category] ? "展开" : "收起"}
+                      </span>
+                    </div>
                   </div>
 
                   {!collapsed[category] && (
                     <div className="mt-3 space-y-3">
                       {groupedItems[category].map(item => (
-                        <ItemCard
-                          key={item.id}
-                          item={item}
-                          onEdit={(item) => {
-                            setCurrentEditItem(item);
-                            setEditModalVisible(true);
-                          }}
-                          onDelete={handleDeleteItem}
-                          onUseOnce={handleUseOnce}
-                          onUseMinus={handleUseMinus}
-                          onMarkFinished={handleMarkFinished}
-                          onCopy={handleCopyItem}
-                          initiallyCollapsed={true}
-                        />
+                        <div key={item.id} className="relative">
+                          <ItemCard
+                            item={item}
+                            onEdit={(item) => {
+                              setCurrentEditItem(item);
+                              setEditModalVisible(true);
+                            }}
+                            onDelete={handleDeleteItem}
+                            onUseOnce={handleUseOnce}
+                            onUseMinus={handleUseMinus}
+                            onMarkFinished={handleMarkFinished}
+                            onCopy={handleCopyItem}
+                            initiallyCollapsed={true}
+                          />
+                          {/* 物品移动分类下拉框 */}
+                          <select
+                            onChange={(e) => moveItemToCategory(item.id, e.target.value)}
+                            className="absolute top-2 right-2 text-xs border rounded p-1 bg-white z-10"
+                            defaultValue={item.category}
+                          >
+                            {categories.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -904,6 +992,8 @@ export default function App() {
                 categories={categories} 
                 onSubmit={handleAddItem}
                 recentCategory={recentCategory}
+                lastAlbumPath={lastAlbumPath}
+                onAlbumPathChange={setLastAlbumPath}
               />
             </div>
 

@@ -1,70 +1,135 @@
 import React, { useState } from "react";
-import ItemForm from "./ItemForm";
 
-const ItemCard = ({ 
-  item, onEdit, onDelete, onUseOnce, onUseMinus, onMarkFinished, onCopy, onMoveCategory, categories
+const ItemCard = ({
+  item,
+  onEdit,
+  onDelete,
+  onUseOnce,
+  onUseMinus,
+  onMarkFinished,
+  onCopy,
+  initiallyCollapsed = true,
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [collapsed, setCollapsed] = useState(initiallyCollapsed);
 
-  const calculateTotalCost = () => {
-    const base = Number(item.price) || 0;
-    const add = (item.additionalCosts || []).reduce((s, c) => s + (Number(c.amt) || 0), 0);
-    return base + add;
-  };
-
-  const calculateCostPerUse = () => {
-    const total = calculateTotalCost();
-    const used = item.usedCount || 0;
-    return used === 0 ? total.toFixed(2) : (total / used).toFixed(2);
-  };
-
-  const calculateUnitCost = () => {
-    if (!item.quantity) return null;
-    return (calculateTotalCost() / Number(item.quantity)).toFixed(2);
-  };
-
-  if (isEditing) {
-    return (
-      <div className="bg-white p-4 rounded-lg shadow-md border">
-        <ItemForm item={item} categories={categories} onSubmit={(d)=>{onEdit(d);setIsEditing(false);}} />
-        <button onClick={()=>setIsEditing(false)} className="mt-3 w-full py-2 bg-gray-200 rounded">取消</button>
-      </div>
-    );
-  }
+  // 单次成本计算
+  const singleCost =
+    item.type === "consume" && item.usedCount > 0
+      ? (Number(item.price) / item.usedCount).toFixed(2)
+      : "—";
 
   return (
-    <div className={`bg-white p-4 rounded-lg shadow-md border ${item.isFinished?"bg-gray-50 border-gray-400":""}`}>
-      <div className="flex justify-between items-center">
-        <h3 className="font-semibold">{item.name}</h3>
-        <button onClick={()=>setExpanded(!expanded)} className="text-sm text-blue-600">{expanded?"收起 ↑":"展开 ↓"}</button>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* 头部：名称 + 折叠开关 */}
+      <div
+        className="px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <div className="flex items-center gap-2">
+          {item.image && (
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-8 h-8 object-cover rounded border"
+            />
+          )}
+          <span className="font-medium text-gray-800">{item.name}</span>
+          {item.isFinished && (
+            <span className="text-xs bg-red-100 text-red-600 px-1.5 rounded">
+              已耗尽
+            </span>
+          )}
+        </div>
+        <span className="text-sm text-gray-500">
+          {collapsed ? "展开" : "收起"}
+        </span>
       </div>
 
-      {/* 折叠时极简显示 */}
-      {!expanded && (
-        <div className="mt-1 text-sm flex gap-3">
-          <span>单次 ¥{calculateCostPerUse()}</span>
-          {calculateUnitCost() && <span>单价 ¥{calculateUnitCost()}</span>}
-        </div>
-      )}
+      {/* 展开内容 */}
+      {!collapsed && (
+        <div className="px-4 pb-4 border-t pt-3 space-y-3 text-sm">
+          {/* 基础信息 */}
+          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+            <div>分类：{item.category}</div>
+            <div>单价：¥{Number(item.price || 0).toFixed(2)}</div>
+            {item.type === "consume" && (
+              <>
+                <div>已使用：{item.usedCount || 0} 次</div>
+                <div>单次成本：¥{singleCost}</div>
+              </>
+            )}
+          </div>
 
-      {expanded && (
-        <div className="mt-2 text-sm">
-          <p>分类：{item.category}</p>
-          <p>总成本：¥{calculateTotalCost().toFixed(2)}</p>
-          <p>已使用：{item.usedCount || 0} 次</p>
-          {item.quantity && <p>总量：{item.quantity}</p>}
-          {item.image && <img src={item.image} className="w-full h-32 object-cover rounded mt-2" />}
-        </div>
-      )}
+          {/* 备注 */}
+          {item.note && (
+            <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+              {item.note}
+            </div>
+          )}
 
-      {expanded && (
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {item.type ==="consume" && !item.isFinished && <button onClick={()=>onUseOnce(item.id)} className="py-1 bg-green-500 text-white rounded text-sm">使用一次</button>}
-          <button onClick={()=>setIsEditing(true)} className="py-1 bg-blue-500 text-white rounded text-sm">编辑</button>
-          <button onClick={()=>onCopy(item)} className="py-1 bg-purple-500 text-white rounded text-sm">复制</button>
-          <button onClick={()=>{const newCat=prompt("输入目标分类",item.category);if(newCat)onMoveCategory(item.id,newCat);}} className="py-1 bg-yellow-500 text-white rounded text-sm">移动分类</button>
-          <button onClick={()=>onDelete(item.id)} className="col-span-2 py-1 bg-red-500 text-white rounded text-sm">删除</button>
+          {/* 消耗品操作区 */}
+          {item.type === "consume" && !item.isFinished && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUseMinus(item.id);
+                }}
+                className="px-2 py-1 bg-gray-200 text-xs rounded hover:bg-gray-300"
+              >
+                −次数
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUseOnce(item.id);
+                }}
+                className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200"
+              >
+                +使用1次
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkFinished(item.id);
+                }}
+                className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded hover:bg-red-200"
+              >
+                标记耗尽
+              </button>
+            </div>
+          )}
+
+          {/* 功能按钮 */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(item);
+              }}
+              className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              编辑
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy(item);
+              }}
+              className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+            >
+              复制
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(item.id);
+              }}
+              className="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              删除
+            </button>
+          </div>
         </div>
       )}
     </div>
