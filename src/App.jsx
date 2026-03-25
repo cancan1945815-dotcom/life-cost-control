@@ -44,6 +44,20 @@ const getFinanceStats = (transactions) => {
   return { totalExpense, totalIncome, balance };
 };
 
+// ====================== 【新增】非消耗品每日成本计算 ======================
+const calculateDailyCost = (purchaseDate, price) => {
+  if (!purchaseDate || !price || price <= 0) return "0.00";
+  try {
+    const buyDay = new Date(purchaseDate);
+    const today = new Date();
+    const diffTime = today - buyDay;
+    const days = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+    return (price / days).toFixed(2);
+  } catch {
+    return "0.00";
+  }
+};
+
 export default function App() {
   // 核心状态
   const [items, setItems] = useState(() => 
@@ -428,10 +442,10 @@ export default function App() {
 
   // 渲染
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-4 sm:p-6 max-w-5xl mx-auto font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 sm:p-6 max-w-5xl mx-auto font-sans">
       {/* 版本更新提醒 */}
       {(showUpdateAlert || updateAvailable) && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-white text-gray-800 p-4 rounded-lg shadow-xl z-50 max-w-md w-full border border-green-200">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-white text-gray-800 p-4 rounded-xl shadow-2xl z-50 max-w-md w-full border border-green-200 transform transition-all duration-300">
           <div className="flex justify-between items-start">
             <div>
               <h3 className="font-bold text-lg text-green-600">🎉 {updateAvailable ? "新版本可用" : "版本更新完成"}</h3>
@@ -451,7 +465,7 @@ export default function App() {
               {updateAvailable && (
                 <button 
                   onClick={performUpdate}
-                  className="px-2 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 transition-colors"
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors"
                 >
                   立即更新
                 </button>
@@ -461,7 +475,7 @@ export default function App() {
                   setShowUpdateAlert(false);
                   setUpdateAvailable(false);
                 }}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100"
               >
                 ×
               </button>
@@ -472,11 +486,11 @@ export default function App() {
 
       {/* 顶部悬浮添加按钮（固定顶部，不随滚动）*/}
       {activeTab === "items" && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md px-4 py-3 flex justify-between items-center">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-lg backdrop-blur-md bg-opacity-95 px-4 py-3 flex justify-between items-center">
           <h1 className="text-lg font-bold text-blue-600">物品管理</h1>
           <button
             onClick={() => setShowAddItemModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow hover:bg-blue-700"
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium shadow hover:shadow-lg transition-all"
           >
             ➕ 添加新物品
           </button>
@@ -493,11 +507,11 @@ export default function App() {
           <div className="flex gap-3">
             <button 
               onClick={exportData}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm hover:shadow"
+              className="px-4 py-2 text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-md transition-all"
             >
               导出数据
             </button>
-            <label className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all shadow-sm hover:shadow cursor-pointer">
+            <label className="px-4 py-2 text-sm bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-md transition-all cursor-pointer">
               导入数据
               <input
                 type="file"
@@ -525,7 +539,7 @@ export default function App() {
           >
             物品管理
             {activeTab === "items" && (
-              <span className="absolute bottom-0 left-0 w-full h-1 bg-blue-600 rounded-t-sm"></span>
+              <span className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-sm"></span>
             )}
           </button>
           <button
@@ -538,7 +552,7 @@ export default function App() {
           >
             每日穿搭
             {activeTab === "outfit" && (
-              <span className="absolute bottom-0 left-0 w-full h-1 bg-pink-600 rounded-t-sm"></span>
+              <span className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-pink-500 to-pink-600 rounded-t-sm"></span>
             )}
           </button>
           <button
@@ -551,7 +565,7 @@ export default function App() {
           >
             记账管理
             {activeTab === "finance" && (
-              <span className="absolute bottom-0 left-0 w-full h-1 bg-green-600 rounded-t-sm"></span>
+              <span className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-green-600 rounded-t-sm"></span>
             )}
           </button>
         </div>
@@ -574,7 +588,7 @@ export default function App() {
       {activeTab === "items" && (
         <>
           {/* 搜索与筛选栏 */}
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-col sm:flex-row gap-4">
+          <div className="bg-white rounded-xl shadow-md p-4 mb-6 flex flex-col sm:flex-row gap-4 transform hover:shadow-lg transition-shadow">
             <input
               type="text"
               placeholder="搜索物品名称..."
@@ -595,7 +609,7 @@ export default function App() {
           </div>
 
           {/* 总价值统计模块 */}
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
+          <div className="bg-white rounded-xl shadow-md p-4 mb-6 border border-gray-100 hover:shadow-lg transition-shadow">
             <div 
               className="flex justify-between items-center cursor-pointer"
               onClick={() => setTotalValueExpanded(!totalValueExpanded)}
@@ -609,9 +623,9 @@ export default function App() {
             {totalValueExpanded && (
               <div className="mt-3 pt-3 border-t">
                 {Object.keys(groupedItems).map(cat => (
-                  <div key={cat} className="flex justify-between text-sm py-1">
+                  <div key={cat} className="flex justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
                     <span>{cat}</span>
-                    <span>¥{calculateCategoryTotalValue(cat)}</span>
+                    <span className="font-medium">¥{calculateCategoryTotalValue(cat)}</span>
                   </div>
                 ))}
               </div>
@@ -628,7 +642,7 @@ export default function App() {
             </h2>
 
             {Object.keys(groupedItems).length === 0 ? (
-              <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
+              <div className="bg-white rounded-xl shadow-md p-10 text-center border border-gray-100">
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="#e5e7eb" viewBox="0 0 16 16" className="mx-auto mb-4">
                   <path d="M2.5 2.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11zm2-2a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM0 13a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5V6a.5.5 0 0 0-1 0v7a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5V6a.5.5 0 0 0-1 0v7z"/>
                 </svg>
@@ -640,7 +654,7 @@ export default function App() {
                 <div key={category} className="mb-6">
                   <div
                     onClick={() => toggleCollapse(category)}
-                    className="bg-white rounded-lg px-5 py-3.5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-all shadow-sm border border-gray-100"
+                    className="bg-white rounded-lg px-5 py-3.5 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition-all shadow-md border border-gray-100"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-800">
@@ -658,7 +672,7 @@ export default function App() {
                           const subCat = prompt("请输入子分类名称");
                           if (subCat) addCustomCategory(`${category}/${subCat}`);
                         }}
-                        className="text-xs text-green-600"
+                        className="text-xs text-green-600 hover:text-green-700"
                       >
                         +子分类
                       </button>
@@ -667,7 +681,7 @@ export default function App() {
                           e.stopPropagation();
                           deleteCategory(category);
                         }}
-                        className="text-xs text-red-500"
+                        className="text-xs text-red-500 hover:text-red-600"
                       >
                         删除分类
                       </button>
@@ -694,10 +708,18 @@ export default function App() {
                             onCopy={handleCopyItem}
                             initiallyCollapsed={true}
                           />
+
+                          {/* ====================== 【新增】非消耗品每日成本显示 ====================== */}
+                          {item.type !== "consume" && (
+                            <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs px-2 py-1 rounded-full shadow-md">
+                              每日成本 ¥{calculateDailyCost(item.purchaseDate, item.price)}
+                            </div>
+                          )}
+
                           {/* 物品移动分类下拉框 */}
                           <select
                             onChange={(e) => moveItemToCategory(item.id, e.target.value)}
-                            className="absolute top-2 right-2 text-xs border rounded p-1 bg-white z-10"
+                            className="absolute top-2 right-2 text-xs border rounded p-1 bg-white z-10 shadow-sm"
                             defaultValue={item.category}
                           >
                             {categories.map(c => (
@@ -719,7 +741,7 @@ export default function App() {
       {activeTab === "outfit" && (
         <div className="space-y-8 mb-12">
           {/* 今日穿搭选择区 */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
             <h2 className="text-xl font-semibold text-pink-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
@@ -754,7 +776,7 @@ export default function App() {
                     <div
                       key={item.id}
                       onClick={() => toggleOutfitItem(item.id)}
-                      className={`border rounded-xl p-4 cursor-pointer transition-all shadow-sm hover:shadow ${
+                      className={`border rounded-xl p-4 cursor-pointer transition-all shadow-md hover:shadow-lg ${
                         selectedOutfitItems.includes(item.id)
                           ? "border-pink-500 bg-pink-50 ring-2 ring-pink-200"
                           : "border-gray-200 hover:border-gray-300"
@@ -773,7 +795,7 @@ export default function App() {
 
                 <button
                   onClick={saveTodayOutfit}
-                  className="w-full py-3.5 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 transition-all shadow-sm hover:shadow"
+                  className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-pink-600 text-white rounded-lg font-medium hover:shadow-lg transition-all"
                 >
                   保存今日穿搭记录
                 </button>
@@ -782,7 +804,7 @@ export default function App() {
           </div>
 
           {/* 历史穿搭记录 */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
             <h2 className="text-xl font-semibold text-pink-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
@@ -837,7 +859,7 @@ export default function App() {
         <div className="space-y-8 mb-12">
           {/* 财务统计卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-red-500 border border-gray-100 hover:shadow transition-all">
+            <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-red-500 border border-gray-100 hover:shadow-lg transition-all">
               <h3 className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
@@ -847,7 +869,7 @@ export default function App() {
               </h3>
               <p className="text-2xl font-bold text-red-600">¥{getFinanceStats(transactions).totalExpense}</p>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500 border border-gray-100 hover:shadow transition-all">
+            <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-green-500 border border-gray-100 hover:shadow-lg transition-all">
               <h3 className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
@@ -857,7 +879,7 @@ export default function App() {
               </h3>
               <p className="text-2xl font-bold text-green-600">¥{getFinanceStats(transactions).totalIncome}</p>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500 border border-gray-100 hover:shadow transition-all">
+            <div className="bg-white rounded-xl shadow-md p-5 border-l-4 border-blue-500 border border-gray-100 hover:shadow-lg transition-all">
               <h3 className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-7-4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 9 4z"/>
@@ -871,7 +893,7 @@ export default function App() {
           </div>
 
           {/* 添加记账记录 */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
             <h2 className="text-xl font-semibold text-green-600 mb-6 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M14 3H2v10h12V3zM2 2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H2z"/>
@@ -882,7 +904,7 @@ export default function App() {
           </div>
 
           {/* 记账记录列表 */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow">
             <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
               <h2 className="text-xl font-semibold text-green-600 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
@@ -969,8 +991,8 @@ export default function App() {
 
       {/* 添加物品弹窗 */}
       {showAddItemModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
             <div className="p-5 border-b flex justify-between items-center bg-gray-50">
               <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
@@ -1011,8 +1033,8 @@ export default function App() {
 
       {/* 编辑物品弹窗 */}
       {editModalVisible && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100">
             <div className="p-5 border-b flex justify-between items-center bg-gray-50">
               <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
