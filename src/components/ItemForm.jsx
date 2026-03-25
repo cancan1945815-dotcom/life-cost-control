@@ -1,317 +1,74 @@
-import React, { useState, useEffect } from "react";
-import Calculator from "./Calculator";
+import React, { useState } from "react";
+import ItemForm from "./ItemForm";
 
-const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
-  const [formState, setFormState] = useState({
-    name: item.name || "",
-    price: item.price?.toString() || "",
-    purchaseDate: item.purchaseDate || "",
-    expireDate: item.expireDate || "",
-    type: item.type || "long",
-    category: item.category || recentCategory || "服饰",
-    customCategory: "",
-    quantity: item.quantity?.toString() || "",
-    usedCount: item.usedCount?.toString() || "",
-    additionalCosts: [...(item.additionalCosts || [])],
-    image: item.image || null
-  });
+const ItemCard = ({ 
+  item, onEdit, onDelete, onUseOnce, onUseMinus, onMarkFinished, onCopy, onMoveCategory, categories
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
-  const [calculatorValue, setCalculatorValue] = useState(formState.price);
-  const [showCalculator, setShowCalculator] = useState(false);
-
-  // 复制物品后自动聚焦并选中“副本”文字
-  useEffect(() => {
-    if (item.name?.includes("（副本）") && !item.id) {
-      const nameInput = document.querySelector('input[placeholder="如：纯棉T恤、无线鼠标"]');
-      if (nameInput) {
-        nameInput.focus();
-        const suffixIndex = nameInput.value.indexOf('（副本）');
-        if (suffixIndex > -1) {
-          nameInput.setSelectionRange(suffixIndex, nameInput.value.length);
-        }
-      }
-    }
-  }, [item]);
-
-  const handleChange = (field, value) => {
-    setFormState(prev => ({ ...prev, [field]: value }));
-    if (field === "price") setCalculatorValue(value);
+  const calculateTotalCost = () => {
+    const base = Number(item.price) || 0;
+    const add = (item.additionalCosts || []).reduce((s, c) => s + (Number(c.amt) || 0), 0);
+    return base + add;
   };
 
-  const handleCalculatorKeyPress = (key) => {
-    if (key === "C") {
-      setCalculatorValue("");
-      handleChange("price", "");
-    } else if (key === "=") {
-      try {
-        const sanitized = calculatorValue
-          .replace(/[^0-9+\-*/.()]/g, "")
-          .replace(/(\d+)\.(\d*)\./g, "$1.$2")
-          .replace(/(\+|\-|\*|\/){2,}/g, "$1");
-
-        if (sanitized) {
-          const result = eval(sanitized);
-          setCalculatorValue(result.toString());
-          handleChange("price", result.toString());
-        }
-      } catch (e) {
-        setCalculatorValue("错误");
-      }
-    } else {
-      setCalculatorValue(prev => prev === "错误" ? key : prev + key);
-    }
+  const calculateCostPerUse = () => {
+    const total = calculateTotalCost();
+    const used = item.usedCount || 0;
+    return used === 0 ? total.toFixed(2) : (total / used).toFixed(2);
   };
 
-  const addAdditionalCost = () => {
-    const desc = prompt("请输入附加成本描述（如：运费、安装费）：");
-    const amt = prompt("请输入附加成本金额（元）：");
-    if (!desc || !amt || isNaN(Number(amt))) {
-      alert("描述不能为空，金额必须是数字！");
-      return;
-    }
-    setFormState(prev => ({
-      ...prev,
-      additionalCosts: [...prev.additionalCosts, { desc, amt: Number(amt) }]
-    }));
+  const calculateUnitCost = () => {
+    if (!item.quantity) return null;
+    return (calculateTotalCost() / Number(item.quantity)).toFixed(2);
   };
 
-  const removeAdditionalCost = (index) => {
-    setFormState(prev => ({
-      ...prev,
-      additionalCosts: prev.additionalCosts.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    handleChange("image", url);
-  };
-
-  const removeImage = () => {
-    if (window.confirm("确定删除这张图片吗？")) {
-      handleChange("image", null);
-    }
-  };
-
-  const handleSubmit = () => {
-    const { customCategory, ...submitData } = formState;
-
-    let finalCategory = submitData.category;
-    if (finalCategory === "自定义") {
-      finalCategory = customCategory.trim();
-      if (!finalCategory) {
-        alert("请输入自定义分类名称");
-        return;
-      }
-    }
-
-    submitData.price = Number(submitData.price);
-    if (submitData.type === "consume") {
-      submitData.quantity = submitData.quantity ? Number(submitData.quantity) : null;
-      submitData.usedCount = submitData.usedCount ? Number(submitData.usedCount) : 0;
-    } else {
-      submitData.quantity = null;
-      submitData.usedCount = null;
-    }
-
-    submitData.category = finalCategory;
-    submitData.id = item.id || Date.now();
-    submitData.isFinished = item.isFinished || false;
-    submitData.inTrash = item.inTrash || false;
-
-    onSubmit(submitData, finalCategory);
-  };
+  if (isEditing) {
+    return (
+      <div className="bg-white p-4 rounded-lg shadow-md border">
+        <ItemForm item={item} categories={categories} onSubmit={(d)=>{onEdit(d);setIsEditing(false);}} />
+        <button onClick={()=>setIsEditing(false)} className="mt-3 w-full py-2 bg-gray-200 rounded">取消</button>
+      </div>
+    );
+  }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div className="sm:col-span-2">
-        <label className="block text-sm font-medium text-gray-600 mb-1">物品名称 <span className="text-red-500">*</span></label>
-        <input
-          type="text"
-          value={formState.name}
-          onChange={(e) => handleChange("name", e.target.value)}
-          placeholder="如：纯棉T恤、无线鼠标"
-          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />
+    <div className={`bg-white p-4 rounded-lg shadow-md border ${item.isFinished?"bg-gray-50 border-gray-400":""}`}>
+      <div className="flex justify-between items-center">
+        <h3 className="font-semibold">{item.name}</h3>
+        <button onClick={()=>setExpanded(!expanded)} className="text-sm text-blue-600">{expanded?"收起 ↑":"展开 ↓"}</button>
       </div>
 
-      <div className="sm:col-span-2">
-        <label className="block text-sm font-medium text-gray-600 mb-1">价格（元） <span className="text-red-500">*</span></label>
-        <div className="relative">
-          <input
-            type="text"
-            value={formState.price}
-            onChange={(e) => handleChange("price", e.target.value)}
-            placeholder="0.00 或输入计算公式（如：100+20*2）"
-            className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 pr-20"
-          />
-          <button
-            onClick={() => setShowCalculator(!showCalculator)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-sm"
-          >
-            {showCalculator ? "收起计算器" : "使用计算器"}
-          </button>
+      {/* 折叠时极简显示 */}
+      {!expanded && (
+        <div className="mt-1 text-sm flex gap-3">
+          <span>单次 ¥{calculateCostPerUse()}</span>
+          {calculateUnitCost() && <span>单价 ¥{calculateUnitCost()}</span>}
         </div>
-        
-        {showCalculator && (
-          <Calculator value={calculatorValue} onKeyPress={handleCalculatorKeyPress} />
-        )}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-600 mb-1">购买日期 <span className="text-red-500">*</span></label>
-        <input
-          type="date"
-          value={formState.purchaseDate}
-          onChange={(e) => handleChange("purchaseDate", e.target.value)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-600 mb-1">到期日期（可选）</label>
-        <input
-          type="date"
-          value={formState.expireDate}
-          onChange={(e) => handleChange("expireDate", e.target.value)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-600 mb-1">物品类型 <span className="text-red-500">*</span></label>
-        <select
-          value={formState.type}
-          onChange={(e) => handleChange("type", e.target.value)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-        >
-          <option value="long">长期物品（如电器、家具）</option>
-          <option value="consume">消耗品（如服饰、食品、日用品）</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-600 mb-1">物品分类 <span className="text-red-500">*</span></label>
-        
-        <select
-          value={formState.category}
-          onChange={(e) => {
-            handleChange("category", e.target.value);
-            if (e.target.value !== "自定义") handleChange("customCategory", "");
-          }}
-          className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-        >
-          {categories.map(cat => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-          <option value="自定义">自定义分类</option>
-        </select>
-        
-        {formState.category === "自定义" && (
-          <input
-            type="text"
-            placeholder="输入自定义分类名称"
-            value={formState.customCategory}
-            onChange={(e) => handleChange("customCategory", e.target.value)}
-            className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-          />
-        )}
-      </div>
-
-      {formState.type === "consume" && (
-        <>
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">总数量（可选）</label>
-            <input
-              type="number"
-              value={formState.quantity}
-              onChange={(e) => handleChange("quantity", e.target.value)}
-              placeholder="如：10片、5件"
-              className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">初始使用次数（可选）</label>
-            <input
-              type="number"
-              min="0"
-              value={formState.usedCount}
-              onChange={(e) => handleChange("usedCount", e.target.value)}
-              placeholder="默认0次"
-              className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-          </div>
-        </>
       )}
 
-      <div className="sm:col-span-2 mt-4">
-        <div className="flex justify-between items-center mb-2">
-          <label className="block text-sm font-medium text-gray-600">附加成本（如运费、安装费）</label>
-          <button
-            onClick={addAdditionalCost}
-            className="px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors"
-          >
-            添加
-          </button>
+      {expanded && (
+        <div className="mt-2 text-sm">
+          <p>分类：{item.category}</p>
+          <p>总成本：¥{calculateTotalCost().toFixed(2)}</p>
+          <p>已使用：{item.usedCount || 0} 次</p>
+          {item.quantity && <p>总量：{item.quantity}</p>}
+          {item.image && <img src={item.image} className="w-full h-32 object-cover rounded mt-2" />}
         </div>
+      )}
 
-        {formState.additionalCosts.length > 0 && (
-          <div className="bg-gray-50 rounded-md p-3 mt-2">
-            {formState.additionalCosts.map((cost, index) => (
-              <div key={index} className="flex justify-between items-center mb-2 last:mb-0">
-                <span className="text-sm text-gray-700">{cost.desc}：{cost.amt.toFixed(2)}元</span>
-                <button
-                  onClick={() => removeAdditionalCost(index)}
-                  className="text-red-500 text-sm hover:text-red-700"
-                >
-                  删除
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="sm:col-span-2 mt-4">
-        <label className="block text-sm font-medium text-gray-600 mb-2">凭证图片（可选）</label>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleImageUpload}
-          className="w-full"
-        />
-
-        {formState.image && (
-          <div className="mt-3 flex items-center gap-3">
-            <img
-              src={formState.image}
-              alt="物品凭证"
-              className="w-20 h-20 object-cover rounded-md border border-gray-200"
-            />
-            <button
-              onClick={removeImage}
-              className="text-sm text-red-500 hover:text-red-700"
-            >
-              删除图片
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="sm:col-span-2 mt-6">
-        <button
-          onClick={handleSubmit}
-          className="w-full px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
-          disabled={!formState.name || !formState.price || !formState.purchaseDate}
-        >
-          {item.id ? "保存修改" : "添加物品"}
-        </button>
-      </div>
+      {expanded && (
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          {item.type ==="consume" && !item.isFinished && <button onClick={()=>onUseOnce(item.id)} className="py-1 bg-green-500 text-white rounded text-sm">使用一次</button>}
+          <button onClick={()=>setIsEditing(true)} className="py-1 bg-blue-500 text-white rounded text-sm">编辑</button>
+          <button onClick={()=>onCopy(item)} className="py-1 bg-purple-500 text-white rounded text-sm">复制</button>
+          <button onClick={()=>{const newCat=prompt("输入目标分类",item.category);if(newCat)onMoveCategory(item.id,newCat);}} className="py-1 bg-yellow-500 text-white rounded text-sm">移动分类</button>
+          <button onClick={()=>onDelete(item.id)} className="col-span-2 py-1 bg-red-500 text-white rounded text-sm">删除</button>
+        </div>
+      )}
     </div>
   );
 };
 
-export default ItemForm;
+export default ItemCard;
