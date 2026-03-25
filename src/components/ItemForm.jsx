@@ -15,10 +15,11 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
     additionalCosts: [...(item.additionalCosts || [])],
     image: item.image || null
   });
-  
+
   const [calculatorValue, setCalculatorValue] = useState(formState.price);
   const [showCalculator, setShowCalculator] = useState(false);
 
+  // 复制物品后自动聚焦并选中“副本”文字
   useEffect(() => {
     if (item.name?.includes("（副本）") && !item.id) {
       const nameInput = document.querySelector('input[placeholder="如：纯棉T恤、无线鼠标"]');
@@ -47,7 +48,7 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
           .replace(/[^0-9+\-*/.()]/g, "")
           .replace(/(\d+)\.(\d*)\./g, "$1.$2")
           .replace(/(\+|\-|\*|\/){2,}/g, "$1");
-        
+
         if (sanitized) {
           const result = eval(sanitized);
           setCalculatorValue(result.toString());
@@ -81,16 +82,11 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
     }));
   };
 
-  // ====================== 修复：图片永久保存（Base64） ======================
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      handleChange("image", reader.result); // 保存 Base64
-    };
-    reader.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    handleChange("image", url);
   };
 
   const removeImage = () => {
@@ -101,7 +97,7 @@ const ItemForm = ({ item = {}, categories, onSubmit, recentCategory }) => {
 
   const handleSubmit = () => {
     const { customCategory, ...submitData } = formState;
-    
+
     let finalCategory = submitData.category;
     if (finalCategory === "自定义") {
       finalCategory = customCategory.trim();
