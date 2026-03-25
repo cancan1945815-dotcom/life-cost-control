@@ -28,15 +28,6 @@ const safeParseStorage = (key, defaultValue) => {
   }
 };
 
-// ==================== 【新增】计算非消耗品每日成本 ====================
-const calculateDailyCost = (price, purchaseDate) => {
-  if (!price || !purchaseDate) return "0.00";
-  const buyDay = new Date(purchaseDate);
-  const today = new Date();
-  const days = Math.max(1, Math.floor((today - buyDay) / (1000 * 60 * 60 * 24)));
-  return (Number(price) / days).toFixed(2);
-};
-
 const getFinanceStats = (transactions) => {
   const totalExpense = transactions
     .filter(t => t.type === "expense")
@@ -51,6 +42,16 @@ const getFinanceStats = (transactions) => {
   const balance = (totalIncome - totalExpense).toFixed(2);
   
   return { totalExpense, totalIncome, balance };
+};
+
+// 新增：计算非消耗品每日成本
+const calculateDailyCost = (purchaseDate, price) => {
+  if (!purchaseDate || !price || price <= 0) return "0.00";
+  const buyDay = new Date(purchaseDate);
+  const now = new Date();
+  const diffTime = now - buyDay;
+  const days = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+  return (Number(price) / days).toFixed(2);
 };
 
 export default function App() {
@@ -89,6 +90,8 @@ export default function App() {
   const [currentEditItem, setCurrentEditItem] = useState(null);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [totalValueExpanded, setTotalValueExpanded] = useState(false);
+  // 新增：物品卡片折叠状态
+  const [itemExpanded, setItemExpanded] = useState({});
   
   const fileInputRef = useRef(null);
 
@@ -591,8 +594,6 @@ export default function App() {
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent transition-all"
             />
-            
-            {/* ==================== 【新增】筛选器支持删除分类 ==================== */}
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
@@ -600,9 +601,7 @@ export default function App() {
             >
               <option value="全部">全部分类</option>
               {categories.map(cat => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
+                <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
           </div>
@@ -665,7 +664,6 @@ export default function App() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      {/* 【原有】添加子分类 */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -676,7 +674,6 @@ export default function App() {
                       >
                         +子分类
                       </button>
-                      {/* 【原有】删除分类 */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -695,43 +692,56 @@ export default function App() {
                   {!collapsed[category] && (
                     <div className="mt-3 space-y-3">
                       {groupedItems[category].map(item => (
-                        <div key={item.id} className="relative">
-                          {/* ==================== 【优化】物品卡片：折叠仅显示名称、图片、成本 ==================== */}
-                          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-                            <div className="flex items-start gap-3">
-                              {/* 图片（持久化存储，退出不丢失） */}
-                              {item.image && (
-                                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                                  <img 
-                                    src={item.image} 
-                                    alt={item.name} 
-                                    className="w-full h-full object-cover"
-                                  />
+                        <div key={item.id} className="relative bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+                          {/* 物品卡片折叠头部 - 只显示名称、图片、成本 */}
+                          <div 
+                            className="p-4 flex items-center gap-3 cursor-pointer"
+                            onClick={() => setItemExpanded(prev => ({...prev, [item.id]: !prev[item.id]}))}
+                          >
+                            {/* 图片 */}
+                            {item.image && (
+                              <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0">
+                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                              </div>
+                            )}
+                            {/* 名称 */}
+                            <div className="flex-1 font-medium text-gray-800">{item.name}</div>
+                            
+                            {/* 成本显示 */}
+                            <div className="text-right">
+                              {item.type === "consume" ? (
+                                <>
+                                  <div className="text-sm text-purple-600">
+                                    单次：¥{(item.price / (item.usedCount || 1)).toFixed(2)}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-sm text-blue-600">
+                                  每日：¥{calculateDailyCost(item.purchaseDate, item.price)}
                                 </div>
                               )}
-                              
-                              <div className="flex-1 min-w-0">
-                                {/* 名称 */}
-                                <h3 className="font-medium text-gray-800 truncate">
-                                  {item.name}
-                                </h3>
-                                
-                                {/* 成本展示：非消耗品=每日成本，消耗品=单次成本 */}
-                                <div className="mt-1">
-                                  {item.type !== "consume" ? (
-                                    <p className="text-sm text-blue-600 font-bold">
-                                      每日成本：¥{calculateDailyCost(item.price, item.purchaseDate)}
-                                    </p>
-                                  ) : (
-                                    <p className="text-sm text-green-600 font-bold">
-                                      单次成本：¥{(Number(item.price) / ((item.usedCount || 0) + 1)).toFixed(2)}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
                             </div>
                           </div>
 
+                          {/* 展开后显示全部功能 */}
+                          {itemExpanded[item.id] && (
+                            <div className="border-t p-4">
+                              <ItemCard
+                                item={item}
+                                onEdit={(item) => {
+                                  setCurrentEditItem(item);
+                                  setEditModalVisible(true);
+                                }}
+                                onDelete={handleDeleteItem}
+                                onUseOnce={handleUseOnce}
+                                onUseMinus={handleUseMinus}
+                                onMarkFinished={handleMarkFinished}
+                                onCopy={handleCopyItem}
+                                initiallyCollapsed={false}
+                              />
+                            </div>
+                          )}
+                          
                           {/* 物品移动分类下拉框 */}
                           <select
                             onChange={(e) => moveItemToCategory(item.id, e.target.value)}
@@ -925,7 +935,7 @@ export default function App() {
               <h2 className="text-xl font-semibold text-green-600 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M12 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0zm0 1c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 4c.628 0 1.168-.452 1.293-.892 0-.08-.008-.162-.025-.242l-.008-.015c-.012-.022-.026-.043-.04-.063-.014-.02-.028-.039-.042-.058a1.901 1.901 0 0 0-.128-.122c-.012-.012-.025-.023-.037-.035-.012-.012-.024-.023-.036-.035-.011-.011-.022-.022-.033-.033-.011-.011-.022-.021-.032-.032-.01-.01-.02-.02-.03-.03-.009-.009-.019-.018-.028-.027-.009-.009-.018-.018-.027-.027-.008-.008-.016-.016-.024-.024-.008-.008-.016-.016-.024-.024-.007-.007-.014-.014-.021-.021-.007-.007-.014-.014-.021-.021-.006-.006-.012-.012-.018-.018-.006-.006-.012-.012-.018-.018-.005-.005-.01-.01-.015-.015-.005-.005-.01-.01-.015-.015-.004-.004-.008-.008-.012-.012-.004-.004-.008-.008-.012-.012-.003-.003-.006-.006-.009-.009-.003-.003-.006-.006-.009-.009-.002-.002-.004-.004-.006-.006-.002-.002-.004-.004-.006-.006-.001-.001-.002-.002-.003-.003z"/>
-                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0A5 5 0 0 1 3 8z"/>
+                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0 5 5 0 0 1-10 0z"/>
                 </svg>
                 记账记录
               </h2>
@@ -942,7 +952,7 @@ export default function App() {
               <div className="text-center py-10 text-gray-500">
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="#e5e7eb" viewBox="0 0 16 16" className="mx-auto mb-4">
                   <path d="M12 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0zm0 1c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 4c.628 0 1.168-.452 1.293-.892 0-.08-.008-.162-.025-.242l-.008-.015c-.012-.022-.026-.043-.04-.063-.014-.02-.028-.039-.042-.058a1.901 1.901 0 0 0-.128-.122c-.012-.012-.025-.023-.037-.035-.012-.012-.024-.023-.036-.035-.011-.011-.022-.022-.033-.033-.011-.011-.022-.021-.032-.032-.01-.01-.02-.02-.03-.03-.009-.009-.019-.018-.028-.027-.009-.009-.018-.018-.027-.027-.008-.008-.016-.016-.024-.024-.008-.008-.016-.016-.024-.024-.007-.007-.014-.014-.021-.021-.007-.007-.014-.014-.021-.021-.006-.006-.012-.012-.018-.018-.006-.006-.012-.012-.018-.018-.005-.005-.01-.01-.015-.015-.005-.005-.01-.01-.015-.015-.004-.004-.008-.008-.012-.012-.004-.004-.008-.008-.012-.012-.003-.003-.006-.006-.009-.009-.003-.003-.006-.006-.009-.009-.002-.002-.004-.004-.006-.006-.002-.002-.004-.004-.006-.006-.001-.001-.002-.002-.003-.003z"/>
-                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0A5 5 0 0 1 3 8z"/>
+                  <path d="M8 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM3 8a5 5 0 1 1 10 0 5 5 0 0 1-10 0z"/>
                 </svg>
                 暂无记账记录
               </div>

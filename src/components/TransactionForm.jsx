@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 
 const TransactionForm = ({ onAdd }) => {
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
     type: "expense",
-    category: "日常消费",
+    category: "日用品",
     amount: "",
     date: new Date().toISOString().split("T")[0],
     note: ""
@@ -11,115 +11,106 @@ const TransactionForm = ({ onAdd }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setForm(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.amount || formData.amount <= 0) return;
+    if (!form.amount || Number(form.amount) <= 0) {
+      alert("请输入有效金额");
+      return;
+    }
 
-    const newTrans = {
+    onAdd({
       id: Date.now(),
-      ...formData,
-      amount: parseFloat(formData.amount)
-    };
+      ...form,
+      amount: Number(form.amount)
+    });
 
-    onAdd(newTrans);
-    setFormData({
+    setForm({
       type: "expense",
-      category: "日常消费",
+      category: "日用品",
       amount: "",
       date: new Date().toISOString().split("T")[0],
       note: ""
     });
   };
 
+  const categories = ["服饰", "美妆", "食品", "日用品", "数码产品", "交通", "娱乐", "医疗", "其他"];
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* 类型 */}
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            类型
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">类型</label>
           <select
             name="type"
-            value={formData.type}
+            value={form.type}
             onChange={handleChange}
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
           >
             <option value="expense">支出</option>
             <option value="income">收入</option>
           </select>
         </div>
 
-        {/* 分类 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            分类
-          </label>
-          <input
-            type="text"
-            name="category"
-            value={formData.category}
-            onChange={handleChange}
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
-          />
-        </div>
-
-        {/* 金额 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            金额 *
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">金额（元）*</label>
           <input
             type="number"
-            name="amount"
-            value={formData.amount}
-            onChange={handleChange}
             step="0.01"
-            required
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
-          />
-        </div>
-
-        {/* 日期 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            日期
-          </label>
-          <input
-            type="date"
-            name="date"
-            value={formData.date}
+            min="0"
+            name="amount"
+            value={form.amount}
             onChange={handleChange}
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
           />
         </div>
       </div>
 
-      {/* 备注 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          备注
-        </label>
-        <textarea
-          name="note"
-          value={formData.note}
+        <label className="block text-sm font-medium text-gray-700 mb-1">分类</label>
+        <select
+          name="category"
+          value={form.category}
           onChange={handleChange}
-          rows={2}
-          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent resize-none"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+        >
+          {categories.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">日期</label>
+        <input
+          type="date"
+          name="date"
+          value={form.date}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md"
         />
       </div>
 
-      <div className="pt-4 border-t flex justify-end">
-        <button
-          type="submit"
-          className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-        >
-          保存记录
-        </button>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
+        <input
+          type="text"
+          name="note"
+          value={form.note}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+        />
       </div>
+
+      <button
+        type="submit"
+        className="w-full py-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+      >
+        保存记录
+      </button>
     </form>
   );
 };

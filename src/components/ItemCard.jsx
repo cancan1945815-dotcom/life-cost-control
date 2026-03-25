@@ -1,58 +1,107 @@
-import React from 'react';
+import React, { useState } from "react";
 
-const ItemCard = ({ 
-  item, 
-  onEdit, 
-  onDelete, 
-  onUseOnce, 
-  onUseMinus, 
-  onMarkFinished, 
+const ItemCard = ({
+  item,
+  onEdit,
+  onDelete,
+  onUseOnce,
+  onUseMinus,
+  onMarkFinished,
   onCopy,
-  initiallyCollapsed = true 
+  initiallyCollapsed = true
 }) => {
-  // 计算非消耗品每日成本
-  const calculateDailyCost = (price, purchaseDate) => {
-    if (!price || !purchaseDate) return '0.00';
-    const buyDay = new Date(purchaseDate);
-    const today = new Date();
-    const days = Math.max(1, Math.floor((today - buyDay) / (1000 * 60 * 60 * 24)));
-    return (Number(price) / days).toFixed(2);
-  };
+  const [collapsed, setCollapsed] = useState(initiallyCollapsed);
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-      <div className="flex items-start gap-3">
-        {/* 图片（持久化不丢失） */}
-        {item.image && (
-          <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-            <img 
-              src={item.image} 
-              alt={item.name} 
-              className="w-full h-full object-cover"
+    <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+      <div
+        className="p-3 bg-gray-50 border-b flex justify-between items-center cursor-pointer"
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <div className="font-medium">{item.name}</div>
+        <span className="text-xs text-gray-500">{collapsed ? "展开" : "收起"}</span>
+      </div>
+
+      {!collapsed && (
+        <div className="p-4 space-y-3">
+          {item.image && (
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-full h-32 object-contain border rounded bg-gray-50"
             />
-          </div>
-        )}
-        
-        <div className="flex-1 min-w-0">
-          {/* 名称 */}
-          <h3 className="font-medium text-gray-800 truncate">
-            {item.name}
-          </h3>
-          
-          {/* 成本展示：非消耗品=每日成本，消耗品=单次成本 */}
-          <div className="mt-1">
-            {item.type !== 'consume' ? (
-              <p className="text-sm text-blue-600 font-bold">
-                每日成本：¥{calculateDailyCost(item.price, item.purchaseDate)}
-              </p>
-            ) : (
-              <p className="text-sm text-green-600 font-bold">
-                单次成本：¥{(Number(item.price) / ((item.usedCount || 0) + 1)).toFixed(2)}
-              </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>分类：{item.category}</div>
+            <div>价格：¥{Number(item.price || 0).toFixed(2)}</div>
+            <div>购买：{item.purchaseDate}</div>
+            <div>类型：{item.type === "consume" ? "消耗品" : "耐用品"}</div>
+
+            {item.type === "consume" && (
+              <>
+                <div>已用：{item.usedCount || 0} 次</div>
+                <div>状态：{item.isFinished ? "已耗尽" : "使用中"}</div>
+              </>
             )}
           </div>
+
+          {item.note && (
+            <div className="text-sm text-gray-600 border-t pt-2">
+              备注：{item.note}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t">
+            {item.type === "consume" && !item.isFinished && (
+              <>
+                <button
+                  onClick={() => onUseMinus(item.id)}
+                  className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
+                >
+                  -1 次
+                </button>
+                <button
+                  onClick={() => onUseOnce(item.id)}
+                  className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                >
+                  使用 +1
+                </button>
+              </>
+            )}
+
+            {item.type === "consume" && !item.isFinished && (
+              <button
+                onClick={() => onMarkFinished(item.id)}
+                className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+              >
+                标记已耗尽
+              </button>
+            )}
+
+            <button
+              onClick={() => onEdit(item)}
+              className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+            >
+              编辑
+            </button>
+
+            <button
+              onClick={() => onCopy(item)}
+              className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+            >
+              复制
+            </button>
+
+            <button
+              onClick={() => onDelete(item.id)}
+              className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+            >
+              删除
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
