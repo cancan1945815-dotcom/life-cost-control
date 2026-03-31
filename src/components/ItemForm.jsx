@@ -1,159 +1,100 @@
-import React, { useState, useEffect } from "react";
+import { useState } from 'react';
 
-const ItemForm = ({
-  item,
-  categories,
-  onSubmit,
-  recentCategory,
-  lastAlbumPath,
-  onAlbumPathChange
-}) => {
-  const isEdit = !!item;
-  const [formData, setFormData] = useState({
-    id: item?.id || Date.now(),
-    name: item?.name || "",
-    category: item?.category || recentCategory || "服饰",
-    price: item?.price || "",
-    purchaseDate: item?.purchaseDate || new Date().toISOString().split("T")[0],
-    type: item?.type || "consume", // consume 消耗品 / durable 非消耗品
-    usedCount: item?.usedCount || 0,
-    isFinished: item?.isFinished || false,
-    image: item?.image || null,
-    note: item?.note || ""
-  });
+const ItemForm = ({ onAddItem }) => {
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
+  const [priceInput, setPriceInput] = useState('');
+  const [additionalCost, setAdditionalCost] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [expireDate, setExpireDate] = useState('');
+  const [image, setImage] = useState(null);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setFormData(prev => ({ ...prev, image: ev.target.result }));
-      };
-      reader.readAsDataURL(file);
+  const calcPrice = (str) => {
+    try {
+      return Function(`'use strict';return (${str})`)();
+    } catch {
+      return 0;
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData, formData.category);
+    const finalPrice = calcPrice(priceInput);
+    const addCost = Number(additionalCost) || 0;
+
+    onAddItem({
+      name,
+      category,
+      price: finalPrice,
+      additionalCost: addCost,
+      purchaseDate,
+      expireDate,
+      image,
+    });
+
+    setName('');
+    setCategory('');
+    setPriceInput('');
+    setAdditionalCost('');
+    setPurchaseDate('');
+    setExpireDate('');
+    setImage(null);
+  };
+
+  const handleImage = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setImage(reader.result);
+    reader.readAsDataURL(file);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">物品名称 *</label>
-        <input
-          type="text"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
-          required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+    <form onSubmit={handleSubmit} style={{ border: '1px solid #eee', padding: 16, borderRadius: 8, marginBottom: 20 }}>
+      <div style={{ marginBottom: 10 }}>
+        <label>物品名称</label>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} required
+          style={{ width: '100%', padding: 8, marginTop: 4 }} />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">分类</label>
-        <select
-          name="category"
-          value={formData.category}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-        >
-          {categories.map(cat => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
+      <div style={{ marginBottom: 10 }}>
+        <label>一级分类</label>
+        <input type="text" value={category} onChange={e => setCategory(e.target.value)} required
+          style={{ width: '100%', padding: 8, marginTop: 4 }} />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">价格（元）</label>
-        <input
-          type="number"
-          step="0.01"
-          name="price"
-          value={formData.price}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-        />
+      <div style={{ marginBottom: 10 }}>
+        <label>价格（支持计算：100+50-10）</label>
+        <input type="text" value={priceInput} onChange={e => setPriceInput(e.target.value)}
+          style={{ width: '100%', padding: 8, marginTop: 4 }} />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">购买日期</label>
-        <input
-          type="date"
-          name="purchaseDate"
-          value={formData.purchaseDate}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-        />
+      <div style={{ marginBottom: 10 }}>
+        <label>附加成本</label>
+        <input type="number" value={additionalCost} onChange={e => setAdditionalCost(e.target.value)}
+          style={{ width: '100%', padding: 8, marginTop: 4 }} />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">物品类型</label>
-        <select
-          name="type"
-          value={formData.type}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-        >
-          <option value="consume">消耗品（可计数）</option>
-          <option value="durable">非消耗品（按天折旧）</option>
-        </select>
+      <div style={{ marginBottom: 10 }}>
+        <label>购买日期（可不选）</label>
+        <input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)}
+          style={{ width: '100%', padding: 8, marginTop: 4 }} />
       </div>
 
-      {formData.type === "consume" && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">已使用次数</label>
-          <input
-            type="number"
-            min="0"
-            name="usedCount"
-            value={formData.usedCount}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-      )}
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">物品图片</label>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleImageChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-        />
-        {formData.image && (
-          <img
-            src={formData.image}
-            alt="预览"
-            className="mt-2 max-h-32 rounded-md border object-contain"
-          />
-        )}
+      <div style={{ marginBottom: 10 }}>
+        <label>到期时间（可删除）</label>
+        <input type="date" value={expireDate} onChange={e => setExpireDate(e.target.value)}
+          style={{ width: '100%', padding: 8, marginTop: 4 }} />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
-        <textarea
-          name="note"
-          value={formData.note}
-          onChange={handleChange}
-          rows="2"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-        />
+      <div style={{ marginBottom: 10 }}>
+        <label>图片</label>
+        <input type="file" accept="image/*" onChange={handleImage} />
+        {image && <img src={image} style={{ width: 100, height: 100, objectFit: 'cover', marginTop: 6 }} />}
       </div>
 
-      <button
-        type="submit"
-        className="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-      >
-        {isEdit ? "保存修改" : "添加物品"}
+      <button type="submit" style={{ padding: '10px 16px', backgroundColor: '#007bff', color: '#fff', border: 0, borderRadius: 6, cursor: 'pointer' }}>
+        添加物品
       </button>
     </form>
   );
