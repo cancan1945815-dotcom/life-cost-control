@@ -10,7 +10,6 @@ const ItemList = ({
   onDuplicateItem,
   onAddTransaction,
 }) => {
-  // 默认全部折叠
   const [expandedItemId, setExpandedItemId] = useState(null);
 
   return (
