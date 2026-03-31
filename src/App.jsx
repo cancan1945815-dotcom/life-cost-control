@@ -1,45 +1,11 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
 
-// 穿搭页面
-function DailyOutfitPage() {
-  const [outfits, setOutfits] = useState(() => {
-    const saved = localStorage.getItem('outfits');
-    return saved ? JSON.parse(saved) : [];
-  });
+function App() {
+  // 页面切换：cost = 记账, outfit = 每日穿搭
+  const [page, setPage] = useState('cost');
 
-  useEffect(() => {
-    localStorage.setItem('outfits', JSON.stringify(outfits));
-  }, [outfits]);
-
-  const addOutfit = (item) => {
-    setOutfits([...outfits, { id: Date.now(), ...item }]);
-  };
-
-  const deleteOutfit = (id) => {
-    setOutfits(outfits.filter(i => i.id !== id));
-  };
-
-  return (
-    <div className="page">
-      <h2>每日穿搭</h2>
-      <div className="outfit-list">
-        {outfits.map(item => (
-          <div key={item.id} className="card">
-            {item.image && <img src={item.image} alt="" />}
-            <h3>{item.name}</h3>
-            <div className="tag">{item.category}</div>
-            <button onClick={() => deleteOutfit(item.id)}>删除</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// 主记账页面
-function CostControlPage() {
+  // ============== 记账数据 ==============
   const [items, setItems] = useState(() => {
     const saved = localStorage.getItem('items');
     return saved ? JSON.parse(saved) : [];
@@ -77,46 +43,93 @@ function CostControlPage() {
   };
 
   const addTransaction = (itemId, data) => {
-    setTransactions([
-      ...transactions,
-      { id: Date.now(), itemId, ...data }
-    ]);
+    setTransactions([...transactions, { id: Date.now(), itemId, ...data }]);
+  };
+
+  // ============== 穿搭数据 ==============
+  const [outfits, setOutfits] = useState(() => {
+    const saved = localStorage.getItem('outfits');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const addOutfit = (item) => {
+    setOutfits([...outfits, { id: Date.now(), ...item }]);
+  };
+
+  const deleteOutfit = (id) => {
+    setOutfits(outfits.filter(i => i.id !== id));
   };
 
   return (
-    <div className="page">
-      <h2>物品养护记账</h2>
-
-      <div className="summary">
-        <p>总支出：¥{totalCost.toFixed(2)}</p>
+    <div className="app">
+      {/* 顶部切换栏 */}
+      <div className="tab-bar">
+        <button className={page === 'cost' ? 'active' : ''} onClick={() => setPage('cost')}>
+          物品记账
+        </button>
+        <button className={page === 'outfit' ? 'active' : ''} onClick={() => setPage('outfit')}>
+          每日穿搭
+        </button>
       </div>
 
-      <button className="add-btn" onClick={() => setShowModal(true)}>
-        + 添加物品
-      </button>
-
-      {/* 浮窗表单 */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>添加物品</h3>
-            <ItemForm onAddItem={addItem} onClose={() => setShowModal(false)} />
+      {/* 记账页面 */}
+      {page === 'cost' && (
+        <div className="page-content">
+          <h2>物品养护记账</h2>
+          <div className="summary">
+            <p>总支出：¥{totalCost.toFixed(2)}</p>
           </div>
+
+          <button className="add-btn" onClick={() => setShowModal(true)}>
+            + 添加物品
+          </button>
+
+          {/* 浮窗 */}
+          {showModal && (
+            <div className="modal-overlay" onClick={() => setShowModal(false)}>
+              <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <h3>添加物品</h3>
+                <ItemForm onAddItem={addItem} onClose={() => setShowModal(false)} />
+              </div>
+            </div>
+          )}
+
+          <ItemList
+            items={items}
+            transactions={transactions}
+            onDeleteItem={deleteItem}
+            onDuplicateItem={duplicateItem}
+            onAddTransaction={addTransaction}
+          />
         </div>
       )}
 
-      <ItemList
-        items={items}
-        transactions={transactions}
-        onDeleteItem={deleteItem}
-        onDuplicateItem={duplicateItem}
-        onAddTransaction={addTransaction}
-      />
+      {/* 穿搭页面 */}
+      {page === 'outfit' && (
+        <div className="page-content">
+          <h2>每日穿搭</h2>
+          <div className="outfit-grid">
+            {outfits.map((item) => (
+              <div key={item.id} className="outfit-card">
+                {item.image && <img src={item.image} alt="" />}
+                <h4>{item.name}</h4>
+                <div className="tag">{item.category}</div>
+                <button className="del-btn" onClick={() => deleteOutfit(item.id)}>删除</button>
+              </div>
+            ))}
+          </div>
+          <button className="add-btn" onClick={() => {
+            const name = prompt('穿搭名称');
+            if (!name) return;
+            addOutfit({ name, category: '穿搭', image: null });
+          }}>+ 添加穿搭</button>
+        </div>
+      )}
     </div>
   );
 }
 
-// 物品表单（浮窗里面）
+// 物品表单（浮窗）
 function ItemForm({ onAddItem, onClose }) {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -135,13 +148,17 @@ function ItemForm({ onAddItem, onClose }) {
     r.readAsDataURL(f);
   };
 
+  const calc = (str) => {
+    try { return Function(`'use strict';return (${str})`)(); } catch { return 0; }
+  };
+
   const submit = (e) => {
     e.preventDefault();
     const finalCat = category === '其他' ? customCat : category;
     onAddItem({
       name,
       category: finalCat,
-      price: Number(price) || 0,
+      price: calc(price),
       additionalCost: Number(addCost) || 0,
       purchaseDate,
       expireDate,
@@ -152,10 +169,10 @@ function ItemForm({ onAddItem, onClose }) {
   return (
     <form onSubmit={submit} className="item-form">
       <label>物品名称</label>
-      <input value={name} onChange={e => setName(e.target.value)} required />
+      <input value={name} onChange={(e) => setName(e.target.value)} required />
 
       <label>分类</label>
-      <select value={category} onChange={e => setCategory(e.target.value)} required>
+      <select value={category} onChange={(e) => setCategory(e.target.value)} required>
         <option value="">请选择</option>
         <option>衣</option>
         <option>食</option>
@@ -170,21 +187,21 @@ function ItemForm({ onAddItem, onClose }) {
       {category === '其他' && (
         <>
           <label>自定义分类</label>
-          <input value={customCat} onChange={e => setCustomCat(e.target.value)} required />
+          <input value={customCat} onChange={(e) => setCustomCat(e.target.value)} required />
         </>
       )}
 
-      <label>价格（可直接写 100+50-20）</label>
-      <input value={price} onChange={e => setPrice(e.target.value)} />
+      <label>价格（支持 100+50-20）</label>
+      <input value={price} onChange={(e) => setPrice(e.target.value)} />
 
       <label>附加成本</label>
-      <input value={addCost} onChange={e => setAddCost(e.target.value)} />
+      <input value={addCost} onChange={(e) => setAddCost(e.target.value)} />
 
       <label>购买日期（可不选）</label>
-      <input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} />
+      <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
 
       <label>到期时间（可清空）</label>
-      <input type="date" value={expireDate} onChange={e => setExpireDate(e.target.value)} />
+      <input type="date" value={expireDate} onChange={(e) => setExpireDate(e.target.value)} />
 
       <label>图片</label>
       <input type="file" accept="image/*" onChange={handleImage} />
@@ -201,10 +218,9 @@ function ItemForm({ onAddItem, onClose }) {
 // 物品列表
 function ItemList({ items, transactions, onDeleteItem, onDuplicateItem, onAddTransaction }) {
   const [expanded, setExpanded] = useState(null);
-
   return (
     <div className="item-list">
-      {items.map(item => (
+      {items.map((item) => (
         <div key={item.id} className="item-card">
           <div className="card-head" onClick={() => setExpanded(expanded === item.id ? null : item.id)}>
             <div>
@@ -224,18 +240,16 @@ function ItemList({ items, transactions, onDeleteItem, onDuplicateItem, onAddTra
 
           {expanded === item.id && (
             <div className="detail">
-              <h4>记账</h4>
+              <h4>记账记录</h4>
               <TransactionForm itemId={item.id} onAdd={onAddTransaction} />
               <div className="trans-list">
-                {transactions
-                  .filter(t => t.itemId === item.id)
-                  .map(t => (
-                    <div key={t.id} className="trans-item">
-                      <span>{t.date}</span>
-                      <span>¥{t.amount}</span>
-                      <span>{t.note}</span>
-                    </div>
-                  ))}
+                {transactions.filter(t => t.itemId === item.id).map((t) => (
+                  <div key={t.id} className="trans-item">
+                    <span>{t.date}</span>
+                    <span>¥{t.amount}</span>
+                    <span>{t.note}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -260,27 +274,11 @@ function TransactionForm({ itemId, onAdd }) {
 
   return (
     <form onSubmit={submit} className="trans-form">
-      <input type="number" placeholder="金额" value={amount} onChange={e => setAmount(e.target.value)} required />
-      <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-      <input placeholder="备注" value={note} onChange={e => setNote(e.target.value)} />
+      <input type="number" placeholder="金额" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      <input placeholder="备注" value={note} onChange={(e) => setNote(e.target.value)} />
       <button type="submit">记录</button>
     </form>
-  );
-}
-
-// 入口
-function App() {
-  return (
-    <Router>
-      <div className="nav">
-        <Link to="/">记账本</Link>
-        <Link to="/outfit">每日穿搭</Link>
-      </div>
-      <Routes>
-        <Route path="/" element={<CostControlPage />} />
-        <Route path="/outfit" element={<DailyOutfitPage />} />
-      </Routes>
-    </Router>
   );
 }
 
