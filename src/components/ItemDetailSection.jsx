@@ -1,18 +1,15 @@
 import TransactionForm from './TransactionForm';
-import './ItemDetailSection.css';
 
-const ItemDetailSection = ({ item, transactions, onUpdateItem, onAddTransaction }) => {
+const ItemDetailSection = ({ item, transactions, onAddTransaction }) => {
   return (
     <div className="item-detail">
       <h4>使用记录 & 记账</h4>
 
-      {/* 记账表单 */}
       <TransactionForm
         itemId={item.id}
         onAddTransaction={(data) => onAddTransaction(item.id, data)}
       />
 
-      {/* 交易记录列表 */}
       <div className="transaction-list">
         {transactions.length === 0 ? (
           <p>暂无记录</p>
