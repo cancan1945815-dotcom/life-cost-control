@@ -1,14 +1,166 @@
-#root {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f6f8fa;
+  color: #333;
+  line-height: 1.5;
 }
 
-* {
-  box-sizing: border-box;
+#root {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.app h2 {
+  text-align: center;
+  margin-bottom: 24px;
+  font-size: 24px;
+  color: #222;
+}
+
+/* 统计卡片 */
+.daily-cost-summary {
+  background: white;
+  padding: 18px 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.daily-cost-summary h3 {
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #555;
+}
+
+.daily-cost-summary p {
+  font-size: 15px;
+  margin: 4px 0;
+}
+
+/* 表单 */
+form {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 24px;
+}
+
+form label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  margin-bottom: 14px;
+}
+
+form button {
+  width: 100%;
+  padding: 11px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+form button:hover {
+  background: #0069d9;
+}
+
+/* 物品卡片 */
+.item-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  cursor: pointer;
+}
+
+.item-card h3 {
+  font-size: 17px;
+  margin-bottom: 6px;
+}
+
+/* 分类标签（突出显示） */
+.category-tag {
+  display: inline-block;
+  background-color: #e6f7ff;
+  color: #0066cc;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.item-card img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+/* 按钮组 */
+.card-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.card-buttons button {
+  flex: 1;
+  padding: 7px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.card-buttons .copy-btn {
+  background: #28a745;
+  color: white;
+}
+
+.card-buttons .delete-btn {
+  background: #dc3545;
+  color: white;
+}
+
+/* 展开详情 */
+.item-detail {
+  background: #f9f9f9;
+  padding: 16px;
+  border-radius: 0 0 12px 12px;
+  margin-bottom: 12px;
+}
+
+.transaction-item {
+  background: white;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
